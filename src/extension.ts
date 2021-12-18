@@ -16,7 +16,7 @@ var repeatNumber = 1;
  * @return {number}
  */
 function indexOfOccurrence(line: string, pattern: string, occurrenceNbr: number, reverse: boolean = false, ignoreCase: boolean = false) {
-    if(ignoreCase){
+    if (ignoreCase) {
         line = line.toLocaleLowerCase();
         pattern = pattern.toLocaleLowerCase();
     }
@@ -121,165 +121,161 @@ function getPatternPosition(
     }
 }
 
-    function deleteSelection(editor: vscode.TextEditor, allSelections: vscode.Selection[]) {
-        editor.edit(builder => {
-            allSelections.forEach(selection => {
-                builder.replace(selection, "");
-            });
+function deleteSelection(editor: vscode.TextEditor, allSelections: vscode.Selection[]) {
+    editor.edit(builder => {
+        allSelections.forEach(selection => {
+            builder.replace(selection, "");
         });
+    });
+}
+
+
+/**
+ * Return text from start a begin Position to end position
+ * 
+ * @param {vscode.TextEditor} editor
+ * @param {boolean} reverse 
+ * @param {vscode.Position} startedSelection 
+ * @return {string} 
+ */
+function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
+
+    if (reverse) {
+        // var firstLine = editor.document.lineAt(startedSelection.line + 1);
+        var lastLine = editor.document.lineAt(0);
+        var textRange = new vscode.Range(startedSelection, lastLine.range.start);
+    } else {
+        var lastLine = editor.document.lineAt(editor.document.lineCount - 1);
+        var textRange = new vscode.Range(startedSelection, lastLine.range.end);
     }
 
+    return editor.document.getText(textRange);
+}
 
-    /**
-     * Return text from start a begin Position to end position
-     * 
-     * @param {vscode.TextEditor} editor
-     * @param {boolean} reverse 
-     * @param {vscode.Position} startedSelection 
-     * @return {string} 
-     */
-    function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
+/**
+ * Select of the pattern
+ * 
+ * @param {vscode.TextEditor} editor
+ * @param {string} input 
+ * @param {boolean} isIgnoreCase 
+ * @param {boolean} isDeleteSelection 
+ * @param {boolean} isPatternInclude 
+ */
+function findAndSelection(
+    editor: vscode.TextEditor,
+    input: string,
+    reverse: boolean = false,
+    isIgnoreCase: boolean = false,
+    isDeleteSelection: boolean = false,
+    isPatternInclude: boolean = false,
+    isPatternNotInclude: boolean = false
+) {
+    var allSelections: vscode.Selection[] = [];
+    var notFoundRepeat = 0;
+    for (let i = 0; i < editor.selections.length; i++) {
+        var currentCursor = editor.selections[i].active;
+        var text = getTextRange(editor, reverse, currentCursor);
+        var patternPosition = getPatternPosition(currentCursor, text, input, reverse, isIgnoreCase, isPatternInclude, isPatternNotInclude);
 
-        if (reverse) {
-            // var firstLine = editor.document.lineAt(startedSelection.line + 1);
-            var lastLine = editor.document.lineAt(0);
-            var textRange = new vscode.Range(startedSelection, lastLine.range.start);
+        if (patternPosition == null) {
+            notFoundRepeat += 1;
         } else {
-            var lastLine = editor.document.lineAt(editor.document.lineCount - 1);
-            var textRange = new vscode.Range(startedSelection, lastLine.range.end);
+            allSelections.push(new vscode.Selection(currentCursor, patternPosition));
         }
 
-        return editor.document.getText(textRange);
     }
-
-    /**
-     * Select of the pattern
-     * 
-     * @param {vscode.TextEditor} editor
-     * @param {string} input 
-     * @param {boolean} isIgnoreCase 
-     * @param {boolean} isDeleteSelection 
-     * @param {boolean} isPatternInclude 
-     */
-    function findAndSelection(
-        editor: vscode.TextEditor,
-        input: string,
-        reverse: boolean = false,
-        isIgnoreCase: boolean = false,
-        isDeleteSelection: boolean = false,
-        isPatternInclude: boolean = false,
-        isPatternNotInclude: boolean = false
-    ) {
-        var allSelections: vscode.Selection[] = [];
-        var notFoundRepeat = 0;
-        for (let i = 0; i < editor.selections.length; i++) {
-            var currentCursor = editor.selections[i].active;
-            var text = getTextRange(editor, reverse, currentCursor);
-            var patternPosition = getPatternPosition(currentCursor, text, input, reverse, isIgnoreCase, isPatternInclude, isPatternNotInclude);
-
-            if (patternPosition == null) {
-                notFoundRepeat += 1;
-            } else {
-                if (reverse) {
-                    allSelections.push(new vscode.Selection(currentCursor, patternPosition));
-                } else {
-                    allSelections.push(new vscode.Selection(patternPosition, currentCursor));
-                }
-            }
-            
-        }
-        if(notFoundRepeat >= editor.selections.length){
-            vscode.window.showErrorMessage(`Not found : ${input}`);
-        }else{
-            editor.selections = allSelections;
-            if (isDeleteSelection) {
-                deleteSelection(editor, allSelections);
-            }
+    if (notFoundRepeat >= editor.selections.length) {
+        vscode.window.showErrorMessage(`Not found : ${input}`);
+    } else {
+        editor.selections = allSelections;
+        if (isDeleteSelection) {
+            deleteSelection(editor, allSelections);
         }
     }
+}
 
 
-    /**
-     * Manage the regex of the user input
-     * 
-     * @param {vscode.TextEditor} editor
-     * @param {string} input
-     * @return {void}
-     */
-    function handleRegex(editor: vscode.TextEditor, input: string) {
-        var regex = input.match(/^(.*)\/+(.*)$/) || [""];
-        var pattern = regex[1];
-        var flag = regex[2];
-        repeatNumber = 1;
+/**
+ * Manage the regex of the user input
+ * 
+ * @param {vscode.TextEditor} editor
+ * @param {string} input
+ * @return {void}
+ */
+function handleRegex(editor: vscode.TextEditor, input: string) {
+    var regex = input.match(/^(.*)\/+(.*)$/) || [""];
+    var pattern = regex[1];
+    var flag = regex[2];
+    repeatNumber = 1;
 
-        if (input.slice(input.length - 1) == '/') {
-            pattern = pattern.substring(0, pattern.length - 1);
-            findAndSelection(editor, pattern);
+    if (input.slice(input.length - 1) == '/') {
+        pattern = pattern.substring(0, pattern.length - 1);
+        findAndSelection(editor, pattern);
+        return;
+    }
+    if (!pattern || !flag) {
+        findAndSelection(editor, input);
+        return;
+    }
+
+    var reverse = flag.includes("r");
+    var ignoreCase = flag.includes("i");
+    var isPatternInclude = flag.includes("c");
+    var isPatternNotInclude = flag.includes("e");
+    var isDeleteSelection = flag.includes("d");
+    var findNumber = flag.match(/\d+/);
+
+    if (findNumber) {
+        repeatNumber = parseInt(findNumber[0], 10);
+    }
+
+    findAndSelection(editor, pattern, reverse, ignoreCase, isDeleteSelection, isPatternInclude, isPatternNotInclude);
+}
+
+
+/**
+ * Manage the pattern section
+ * 
+ * @param {vscode.TextEditor} editor
+ * @return {void}
+ */
+async function handleSelection(editor: vscode.TextEditor) {
+    var input = await getKeywordFromUser();
+    var saveLastPattern = vscode.workspace.getConfiguration('select-until-pattern').saveLastPattern;
+    if (!input) {
+        return;
+    }
+    if (saveLastPattern) {
+        lastQuery = input;
+    }
+    handleRegex(editor, input);
+}
+
+
+/**
+ * Display the user input
+ * 
+ * @return {string}
+ */
+function getKeywordFromUser() {
+    return vscode.window.showInputBox({
+        placeHolder: 'Syntax: "<pattern>/i" "<pattern>/ri"',
+        value: lastQuery,
+    });
+}
+
+
+export function activate(context: vscode.ExtensionContext) {
+    let disposable = vscode.commands.registerCommand('extension.select-until-pattern', () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage(`Not Editor is opened`);
             return;
         }
-        if (!pattern || !flag) {
-            findAndSelection(editor, input);
-            return;
-        }
+        handleSelection(editor);
+    });
 
-        var reverse = flag.includes("r");
-        var ignoreCase = flag.includes("i");
-        var isPatternInclude = flag.includes("c");
-        var isPatternNotInclude = flag.includes("e");
-        var isDeleteSelection = flag.includes("d");
-        var findNumber = flag.match(/\d+/);
+    context.subscriptions.push(disposable);
+}
 
-        if (findNumber) {
-            repeatNumber = parseInt(findNumber[0], 10);
-        }
-
-        findAndSelection(editor, pattern, reverse, ignoreCase, isDeleteSelection, isPatternInclude, isPatternNotInclude);
-    }
-
-
-    /**
-     * Manage the pattern section
-     * 
-     * @param {vscode.TextEditor} editor
-     * @return {void}
-     */
-    async function handleSelection(editor: vscode.TextEditor) {
-        var input = await getKeywordFromUser();
-        var saveLastPattern = vscode.workspace.getConfiguration('select-until-pattern').saveLastPattern;
-        if (!input) {
-            return;
-        }
-        if (saveLastPattern) {
-            lastQuery = input;
-        }
-        handleRegex(editor, input);
-    }
-
-
-    /**
-     * Display the user input
-     * 
-     * @return {string}
-     */
-    function getKeywordFromUser() {
-        return vscode.window.showInputBox({
-            placeHolder: 'Syntax: "<pattern>/i" "<pattern>/ri"',
-            value: lastQuery,
-        });
-    }
-
-
-    export function activate(context: vscode.ExtensionContext) {
-        let disposable = vscode.commands.registerCommand('extension.select-until-pattern', () => {
-            const editor = vscode.window.activeTextEditor;
-            if (!editor) {
-                vscode.window.showErrorMessage(`Not Editor is opened`);
-                return;
-            }
-            handleSelection(editor);
-        });
-
-        context.subscriptions.push(disposable);
-    }
-
-    export function deactivate() { }
+export function deactivate() { }
