@@ -25,6 +25,7 @@ Here are some flags to use to indicate the type of search you want to perform, t
 - `c` : tells the extension to include the search match from the selection
 - `e` : tells the extension to exclude the search match from the selection (default behavior)
 - `d` : tells the extension to delete selections 
+- `m` : tells the extension to move to search match, clearing any current selection 
 - `number` : select the n occurrence of the searched word
 
 ## Extension Settings
