@@ -2,7 +2,7 @@
 	"name": "select-until-pattern",
 	"displayName": "Select until pattern",
 	"description": "Offers several actions to quickly enlarge your selection by selecting text from the current position of your cursor to the pattern and actions described on the user input.",
-	"version": "0.0.3",
+	"version": "0.0.4",
 	"publisher": "hajdaini",
 	"author": {
 		"name": "hajdaini"
@@ -34,7 +34,7 @@
 		"Other"
 	],
 	"activationEvents": [
-		"onCommand:extension.select-until-pattern"
+		"onStartupFinished"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
@@ -42,6 +42,10 @@
 			{
 				"command": "extension.select-until-pattern",
 				"title": "Select until pattern"
+			},
+			{
+				"command": "extension.select-in-surround",
+				"title": "Select in surround"
 			}
 		],
 		"configuration": {

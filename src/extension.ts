@@ -4,6 +4,13 @@ import { read } from 'fs';
 let lastQuery = '';
 var repeatNumber = 1;
 
+type SearchOptions = {
+    reverse: boolean,
+    isIgnoreCase: boolean,
+    isPatternInclude: boolean,
+    isPatternNotInclude: boolean,
+}
+
 function* matchAll(pattern: string, test: string, flags: string = "") {
     if (!flags.includes("g")) {
         flags += "g";
@@ -30,7 +37,6 @@ function getPatternPosition(
     reverse: boolean = false,
     isIgnoreCase: boolean = false,
     isPatternInclude: boolean = false,
-    isPatternNotInclude: boolean = false,
 ) {
     let flags = '';
     if (isIgnoreCase) {
@@ -42,17 +48,7 @@ function getPatternPosition(
     }
     let endPosLine = 0;
     let endPosIndex = 0;
-    let includeInSelectionConfig = false;
-
-    if (isPatternInclude) {
-        includeInSelectionConfig = true;
-    }
-    else if (isPatternNotInclude) {
-        includeInSelectionConfig = false;
-    } else {
-        includeInSelectionConfig = vscode.workspace.getConfiguration('select-until-pattern').includePatternInSelection;
-    }
-    const result = getLastMatch(lines, pattern, flags, repeatNumber);
+    const result = getLastMatch(lines, pattern, flags, repeatNumber, reverse);
     if (result === null) return null;
     const { match, lineNumber } = result;
     const index = match.index;
@@ -68,33 +64,48 @@ function getPatternPosition(
         }
     }
     if (reverse) {
-        return new vscode.Position(endPosLine, (includeInSelectionConfig ? endPosIndex : endPosIndex + matchText.length));
+        return new vscode.Position(endPosLine, (isPatternInclude ? endPosIndex : endPosIndex + matchText.length));
     } else {
-        return new vscode.Position(endPosLine, (includeInSelectionConfig ? endPosIndex + matchText.length : endPosIndex));
+        return new vscode.Position(endPosLine, (isPatternInclude ? endPosIndex + matchText.length : endPosIndex));
     }
 }
 
-function getLastMatch(lines: string[], pattern: string, flags: string, repeatNumber: number) {
+function getLastMatch(lines: string[], pattern: string, flags: string, repeatNumber: number, reverse: boolean) {
     let count = 0;
     for (const [lineNumber, line] of lines.entries()) {
+        const matches: { match: RegExpExecArray, lineNumber: number }[] = []
         for (const match of matchAll(pattern, line, flags)) {
-            count++;
-            if (count >= repeatNumber) {
+            matches.push({ match, lineNumber });
+            if (count + matches.length >= repeatNumber && !reverse) {
                 return { match, lineNumber };
             }
         }
+        // if reverse, search forwards but return nth from the end of the line
+        if (reverse && count + matches.length >= repeatNumber) {
+            return matches[matches.length - repeatNumber];
+        }
+        count += matches.length;
     }
     return null;
 }
 
 function deleteSelection(editor: vscode.TextEditor, allSelections: vscode.Selection[]) {
-    editor.edit(builder => {
-        allSelections.forEach(selection => {
+    return editor.edit(builder => {
+        for (const selection of allSelections) {
             builder.replace(selection, "");
-        });
+        };
     });
 }
 
+function modifyAllSelections(editFn: (builder: vscode.TextEditorEdit, selection: vscode.Selection) => void) {
+    const editor = vscode.window.activeTextEditor;
+    if (!editor) return;
+    return editor.edit(builder => {
+        for (const selection of editor.selections) {
+            editFn(builder, selection);
+        }
+    })
+}
 
 /**
  * Return text from start a begin Position to end position
@@ -123,7 +134,6 @@ function findAndSelection(
     isIgnoreCase: boolean = false,
     isDeleteSelection: boolean = false,
     isPatternInclude: boolean = false,
-    isPatternNotInclude: boolean = false,
     isMove: boolean = false
 ) {
     const allSelections: vscode.Selection[] = [];
@@ -131,7 +141,7 @@ function findAndSelection(
     for (const selection of editor.selections) {
         const currentCursor = selection.active;
         const text = getTextRange(editor, reverse, currentCursor);
-        const patternPosition = getPatternPosition(currentCursor, text, input, reverse, isIgnoreCase, isPatternInclude, isPatternNotInclude);
+        const patternPosition = getPatternPosition(currentCursor, text, input, reverse, isIgnoreCase, isPatternInclude);
 
         if (patternPosition == null) {
             notFoundRepeat += 1;
@@ -174,7 +184,6 @@ function handleRegex(editor: vscode.TextEditor, input: string) {
     const reverse = flag.includes("r");
     const ignoreCase = flag.includes("i");
     const isPatternInclude = flag.includes("c");
-    const isPatternNotInclude = flag.includes("e");
     const isDeleteSelection = flag.includes("d");
     const isMove = flag.includes("m")
     const findNumber = flag.match(/\d+/);
@@ -183,7 +192,7 @@ function handleRegex(editor: vscode.TextEditor, input: string) {
         repeatNumber = parseInt(findNumber[0], 10);
     }
 
-    findAndSelection(editor, pattern, reverse, ignoreCase, isDeleteSelection, isPatternInclude, isPatternNotInclude, isMove);
+    findAndSelection(editor, pattern, reverse, ignoreCase, isDeleteSelection, isPatternInclude, isMove);
 }
 
 
@@ -213,6 +222,27 @@ function getKeywordFromUser() {
     });
 }
 
+function selectInSurround(input: string) {
+    console.log(input);
+}
+
+function registerEditorCommand(name: string, context: vscode.ExtensionContext, command: (cmd: string) => void) {
+    const fullName = `extension.${name}`;
+    const disposable = vscode.commands.registerCommand(fullName, async () => {
+        const editor = vscode.window.activeTextEditor;
+        if (!editor) {
+            vscode.window.showErrorMessage(`Editor is not opened`);
+            return;
+        }
+        const input = await vscode.window.showInputBox({
+            placeHolder: 'Syntax: "<pattern>/i" "<pattern>/ri"',
+        })
+        if (input !== undefined) {
+            command(input);
+        }
+    });
+    context.subscriptions.push(disposable);
+}
 
 export function activate(context: vscode.ExtensionContext) {
     const disposable = vscode.commands.registerCommand('extension.select-until-pattern', () => {
@@ -225,6 +255,7 @@ export function activate(context: vscode.ExtensionContext) {
     });
 
     context.subscriptions.push(disposable);
+    registerEditorCommand("select-in-surround", context, selectInSurround);
 }
 
 export function deactivate() { }
