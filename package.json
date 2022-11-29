@@ -55,11 +55,6 @@
 					"type": "boolean",
 					"default": false,
 					"description": "Include or not the searched word/pattern in the selection"
-				},
-				"select-until-pattern.saveLastPattern": {
-					"type": "boolean",
-					"default": true,
-					"description": "Save the last word/pattern searched in the user input"
 				}
 			}
 		}

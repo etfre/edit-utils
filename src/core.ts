@@ -1,12 +1,4 @@
 import * as vscode from 'vscode';
-import { watchFile, watch, writeFile, readFile, FSWatcher } from 'fs';
-import { tmpdir } from 'os';
-import * as handlers from "./handlers"
-import { sep } from 'path';
-import {shutdown, watchRPCInputFile} from "./rpc"
-
-var repeatNumber = 1;
-
 
 
 function* matchAll(pattern: string, test: string, flags: string = "") {
@@ -32,6 +24,8 @@ function getPatternPosition(
     currentCursor: vscode.Position,
     text: string,
     pattern: string,
+    antiPattern: string,
+    count: number,
     reverse: boolean = false,
     isIgnoreCase: boolean = false,
     isPatternInclude: boolean = false,
@@ -46,7 +40,7 @@ function getPatternPosition(
     }
     let endPosLine = 0;
     let endPosIndex = 0;
-    const result = getLastMatch(lines, pattern, flags, repeatNumber, reverse);
+    const result = getLastMatch(lines, pattern, antiPattern, flags, count, reverse);
     if (result === null) return null;
     const { match, lineNumber } = result;
     const index = match.index;
@@ -68,7 +62,7 @@ function getPatternPosition(
     }
 }
 
-function getLastMatch(lines: string[], pattern: string, flags: string, repeatNumber: number, reverse: boolean) {
+function getLastMatch(lines: string[], pattern: string, antiPattern: string, flags: string, repeatNumber: number, reverse: boolean) {
     let count = 0;
     for (const [lineNumber, line] of lines.entries()) {
         const matches: { match: RegExpExecArray, lineNumber: number }[] = []
@@ -124,9 +118,11 @@ function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelect
 /**
  * Select of the pattern
  */
-function findAndSelection(
+export function findAndSelection(
     editor: vscode.TextEditor,
     input: string,
+    antiPattern: string = '',
+    count: number = 1,
     reverse: boolean = false,
     isIgnoreCase: boolean = false,
     isDeleteSelection: boolean = false,
@@ -134,8 +130,11 @@ function findAndSelection(
     isMove: boolean = false,
     swapAnchorAndActive = false
 ) {
-    const allSelections = findSelections(editor,
+    const allSelections = findSelections(
+        editor,
         input,
+        antiPattern,
+        count,
         reverse,
         isIgnoreCase,
         isPatternInclude,
@@ -156,6 +155,8 @@ function findAndSelection(
 function findSelections(
     editor: vscode.TextEditor,
     input: string,
+    antiPattern: string,
+    count: number,
     reverse: boolean = false,
     isIgnoreCase: boolean = false,
     isPatternInclude: boolean = false,
@@ -167,7 +168,7 @@ function findSelections(
     for (const selection of editor.selections) {
         const currentCursor = selection.active;
         const text = getTextRange(editor, reverse, currentCursor);
-        const patternPosition = getPatternPosition(currentCursor, text, input, reverse, isIgnoreCase, isPatternInclude);
+        const patternPosition = getPatternPosition(currentCursor, text, input, antiPattern, count, reverse, isIgnoreCase, isPatternInclude);
 
         if (patternPosition == null) {
             allSelections.push(selection);
@@ -189,69 +190,18 @@ function parseUserInput(input: string) {
 /**
  * Manage the regex of the user input
  */
-function handleRegex(editor: vscode.TextEditor, input: string) {
-    const regex = input.match(/^(.*)\/+(.*)$/) || [""];
-    let pattern = regex[1];
-    const flag = regex[2];
-    repeatNumber = 1;
 
-    if (input.slice(input.length - 1) == '/') {
-        pattern = pattern.substring(0, pattern.length - 1);
-        findAndSelection(editor, pattern);
-        return;
-    }
-    if (!pattern || !flag) {
-        findAndSelection(editor, input);
-        return;
-    }
-
-    const reverse = flag.includes("r");
-    const ignoreCase = flag.includes("i");
-    const isPatternInclude = flag.includes("c");
-    const isDeleteSelection = flag.includes("d");
-    const isMove = flag.includes("m")
-    const findNumber = flag.match(/\d+/);
-
-    if (findNumber) {
-        repeatNumber = parseInt(findNumber[0], 10);
-    }
-
-    findAndSelection(editor, pattern, reverse, ignoreCase, isDeleteSelection, isPatternInclude, isMove);
-}
 
 function selectInSurround(editor: vscode.TextEditor, input: string) {
-    findAndSelection(editor, "\\(", true, true, false, false, false, true)
-    findAndSelection(editor, "\\)", false, true, false, false, false)
+    findAndSelection(editor, "\\(", "\\)", 1, true, true, false, false, false, true)
+    findAndSelection(editor, "\\)", "\\(", 1, false, true, false, false, false)
     console.log(input);
 }
 
-function registerEditorCommand(name: string, context: vscode.ExtensionContext, command: (editor: vscode.TextEditor, cmd: string) => void) {
-    const fullName = `extension.${name}`;
-    const disposable = vscode.commands.registerCommand(fullName, async () => {
-        const editor = vscode.window.activeTextEditor;
-        if (!editor) {
-            vscode.window.showErrorMessage(`Editor is not opened`);
-            return;
-        }
-        const input = await vscode.window.showInputBox({
-            placeHolder: 'Syntax: "<pattern>/i" "<pattern>/ri"',
-        })
-        if (input !== undefined) {
-            command(editor, input);
-        }
-    });
-    context.subscriptions.push(disposable);
+function analyzeLine(line: string, commentPattern: RegExp | null) {
+    let indentationLevel = 0
+    for (let char of line) {
+
+    }
 }
 
-export function activate(context: vscode.ExtensionContext) {
-    registerEditorCommand("select-until-pattern", context, handleRegex);
-    registerEditorCommand("select-in-surround", context, selectInSurround);
-    watchRPCInputFile()
-    // setInterval(() => watchRPCInputFile(RPC_INPUT_FILE, (x: string) => { }), 1000)
-    // disposables.push(watcher.close)
-}
-
-export async function deactivate() {
-    shutdown()
-
-}
