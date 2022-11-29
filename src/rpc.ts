@@ -20,6 +20,7 @@ type clientMessageHandlersType = {
 const clientMessageHandlers: clientMessageHandlersType = {
     "PING": handlers.handlePing,
     "SELECT_UNTIL_PATTERN": handlers.handleSelectUntilPattern,
+    "SELECT_IN_SURROUND": handlers.handleSelectInSurround,
     "GET_ACTIVE_DOCUMENT": handlers.handleGetActiveDocument,
 }
 

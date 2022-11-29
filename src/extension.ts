@@ -3,7 +3,8 @@ import { watchFile, watch, writeFile, readFile, FSWatcher } from 'fs';
 import { tmpdir } from 'os';
 import * as handlers from "./handlers"
 import { sep } from 'path';
-import {shutdown, watchRPCInputFile} from "./rpc"
+import { shutdown, watchRPCInputFile } from "./rpc"
+import * as core from "./core"
 
 var repeatNumber = 1;
 
@@ -220,8 +221,8 @@ function handleRegex(editor: vscode.TextEditor, input: string) {
 }
 
 function selectInSurround(editor: vscode.TextEditor, input: string) {
-    findAndSelection(editor, "\\(", true, true, false, false, false, true)
-    findAndSelection(editor, "\\)", false, true, false, false, false)
+    core.findAndSelection(editor, "\\(", "\\)" ,1, true, true, false, false, false, true)
+    core.findAndSelection(editor, "\\)", "\\(", 1, false, true, false, false, false)
     console.log(input);
 }
 

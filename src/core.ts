@@ -1,18 +1,22 @@
 import * as vscode from 'vscode';
 
 
-function* matchAll(pattern: string, test: string, flags: string = "") {
+function matchAll(pattern: string, test: string, flags: string = "") {
     if (!flags.includes("g")) {
         flags += "g";
     }
+    if (!flags.includes("d")) {
+        flags += "d";
+    }
     const regex = new RegExp(pattern, flags);
+    const matches = []
     while (true) {
         const match = regex.exec(test);
         if (match != null) {
-            yield match;
+            matches.push(match)
         }
         else {
-            break;
+            return matches;
         }
     }
 }
@@ -44,7 +48,7 @@ function getPatternPosition(
     if (result === null) return null;
     const { match, lineNumber } = result;
     const index = match.index;
-    const matchText = match[0]
+    const matchText = match[1]
     endPosLine = reverse ? (currentCursor.line - lineNumber) : (currentCursor.line + lineNumber);
     if (reverse) {
         endPosIndex = index;
@@ -64,19 +68,25 @@ function getPatternPosition(
 
 function getLastMatch(lines: string[], pattern: string, antiPattern: string, flags: string, repeatNumber: number, reverse: boolean) {
     let count = 0;
+    // if antiPattern, merge into one regex then check what we get
+    const bothPatterns = antiPattern.length > 0 ? `(${pattern})|(${antiPattern})` : `(${pattern})`
     for (const [lineNumber, line] of lines.entries()) {
-        const matches: { match: RegExpExecArray, lineNumber: number }[] = []
-        for (const match of matchAll(pattern, line, flags)) {
-            matches.push({ match, lineNumber });
-            if (count + matches.length >= repeatNumber && !reverse) {
-                return { match, lineNumber };
+        const lineMatches = matchAll(bothPatterns, line, flags)
+        if (reverse) {
+            lineMatches.reverse()
+        }
+        for (const match of lineMatches) {
+            // found antipattern
+            if (match[2]) {
+                count--;
+            }
+            else {
+                count++
+                if (count >= repeatNumber) {
+                    return { match, lineNumber }
+                }
             }
         }
-        // if reverse, search forwards but return nth from the end of the line
-        if (reverse && count + matches.length >= repeatNumber) {
-            return matches[matches.length - repeatNumber];
-        }
-        count += matches.length;
     }
     return null;
 }

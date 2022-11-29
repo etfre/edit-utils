@@ -36,6 +36,17 @@ type SelectUntilPatternRequest = RequestBase & {
         isPatternInclude?: boolean
     }
 }
+type SelectInSurroundRequest = RequestBase & {
+    method: "SELECT_IN_SURROUND"
+    params: {
+        left: string,
+        right?: string,
+        count?: number,
+        deleteSelection?: boolean
+        ignoreCase?: boolean
+        isPatternInclude?: boolean
+    }
+}
 type GetActiveDocumentRequest = RequestBase & {
     method: "GET_ACTIVE_DOCUMENT"
 }
