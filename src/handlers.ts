@@ -33,6 +33,8 @@ export async function handleSelectUntilPattern(editor: vscode.TextEditor, params
     );
 }
 export async function handleSelectInSurround(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
+    findAndSelection(editor, "\\(", "\\)" ,1, true, true, false, false, false, true)
+    findAndSelection(editor, "\\)", "\\(", 1, false, true, false, false, false)
     // findAndSelection(editor,
     //     params.pattern,
     //     params.antiPattern,

@@ -52,7 +52,7 @@ type GetActiveDocumentRequest = RequestBase & {
 }
 
 
-type ClientRequest = PingRequest | SelectUntilPatternRequest | GetActiveDocumentRequest
+type ClientRequest = PingRequest | SelectUntilPatternRequest | SelectInSurroundRequest | GetActiveDocumentRequest
 
 type ClientResponseResult = JSONValue
 
