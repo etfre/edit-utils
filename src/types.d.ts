@@ -40,7 +40,7 @@ type SelectInSurroundRequest = RequestBase & {
     method: "SELECT_IN_SURROUND"
     params: {
         left: string,
-        right?: string,
+        right: string,
         count?: number,
         deleteSelection?: boolean
         ignoreCase?: boolean

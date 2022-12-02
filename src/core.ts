@@ -160,6 +160,7 @@ export function findAndSelection(
             deleteSelection(editor, allSelections);
         }
     }
+    return allSelections;
 }
 
 function findSelections(
@@ -181,7 +182,7 @@ function findSelections(
         const patternPosition = getPatternPosition(currentCursor, text, input, antiPattern, count, reverse, isIgnoreCase, isPatternInclude);
 
         if (patternPosition == null) {
-            allSelections.push(selection);
+            // allSelections.push(selection);
             notFoundRepeat += 1;
         } else {
             const anchor = isMove ? patternPosition : selection.anchor;
