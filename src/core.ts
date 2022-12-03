@@ -1,5 +1,8 @@
 import * as vscode from 'vscode';
 
+const parseTreeExtension: vscode.Extension<any> = vscode.extensions.getExtension("pokey.parse-tree") as any;
+
+
 
 function matchAll(pattern: string, test: string, flags: string = "") {
     if (!flags.includes("g")) {
@@ -193,26 +196,3 @@ function findSelections(
     return allSelections;
 
 }
-
-function parseUserInput(input: string) {
-
-}
-
-/**
- * Manage the regex of the user input
- */
-
-
-function selectInSurround(editor: vscode.TextEditor, input: string) {
-    findAndSelection(editor, "\\(", "\\)", 1, true, true, false, false, false, true)
-    findAndSelection(editor, "\\)", "\\(", 1, false, true, false, false, false)
-    console.log(input);
-}
-
-function analyzeLine(line: string, commentPattern: RegExp | null) {
-    let indentationLevel = 0
-    for (let char of line) {
-
-    }
-}
-

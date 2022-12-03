@@ -1,3 +1,4 @@
+// import * as vscode from "vscode"
 
 type JSONValue =
     | string
@@ -47,12 +48,22 @@ type SelectInSurroundRequest = RequestBase & {
         isPatternInclude?: boolean
     }
 }
+
+type SelectNodeRequest = RequestBase & {
+    method: "SELECT_NODE",
+    params: {
+        type: string,
+        direction: "up" | "down" | "before" | "after"
+        count?: number
+    }
+}
+
 type GetActiveDocumentRequest = RequestBase & {
     method: "GET_ACTIVE_DOCUMENT"
 }
 
 
-type ClientRequest = PingRequest | SelectUntilPatternRequest | SelectInSurroundRequest | GetActiveDocumentRequest
+type ClientRequest = PingRequest | SelectUntilPatternRequest | SelectInSurroundRequest | GetActiveDocumentRequest | SelectNodeRequest
 
 type ClientResponseResult = JSONValue
 
@@ -63,3 +74,12 @@ type ClientResponseError = {
 }
 
 type ClientResponse = { jsonrpc: "2.0", id: string } & ({ result: ClientResponseResult } | { error: ClientResponseError })
+
+type TreeNode = {
+    children: Array<TreeNode>
+    endPosition: vscode.Position
+    parent: TreeNode | null
+    startPosition: vscode.Position
+    type: string
+    text: string
+}

@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
-import { shutdown, watchRPCInputFile } from "./rpc"
+import { shutdown, watchRPCInputFile, } from "./rpc"
+import { setup } from "./ast"
 
-
-export function activate(context: vscode.ExtensionContext) {
+export async function activate(context: vscode.ExtensionContext) {
+    await setup()
     watchRPCInputFile()
 }
 

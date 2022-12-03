@@ -19,6 +19,9 @@
 		"word",
 		"regex"
 	],
+	"extensionDependencies": [
+		"pokey.parse-tree"
+	],
 	"bugs": {
 		"url": "https://github.com/hajdaini/select-until-pattern/issues",
 		"email": "ajdaini.hatim@gmail.com"

@@ -1,5 +1,7 @@
 import * as vscode from 'vscode';
 import { findAndSelection } from "./core"
+import * as ast from "./ast"
+
 
 export async function handlePing() {
     return {}
@@ -38,5 +40,16 @@ export async function handleSelectInSurround(editor: vscode.TextEditor, params: 
     editor.document.languageId
     if (selections.length > 0) {
         findAndSelection(editor, params.right, params.left, 1, false, true, isPatternInclude, false, false)
+    }
+}
+
+export async function handleSelectNode(editor: vscode.TextEditor, params: SelectNodeRequest['params']) {
+    const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
+    const root = tree.rootNode
+    const cursorPosition = editor.selection.anchor;
+    const nodeToSelect = ast.searchFromPosition(cursorPosition, root, params.direction, params.type)
+    if (nodeToSelect !== null) {
+        const selection = ast.selectionFromTreeNode(nodeToSelect, false)
+        editor.selections = [selection]
     }
 }
