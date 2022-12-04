@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import * as dsl from "./dsl"
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -34,6 +35,21 @@ function normalizeCondition(condition: UnNormalizedCondition): NormalizedConditi
     return condition
 }
 
+export function dump(node: TreeNode): any {
+    const type = node.type
+    if (node.parent) {
+       console.log(`${node.parent.type} => ${type}`)
+    }
+    else {
+        console.log(type)
+    }
+    console.log(node.text)
+    console.log('--------------------')
+    for (const child of node.children) {
+        dump(child)
+    }
+}
+
 export function* walk(node: TreeNode): Generator<TreeNode> {
     yield node;
     for (const child of node.children) {
@@ -42,7 +58,7 @@ export function* walk(node: TreeNode): Generator<TreeNode> {
         }
     }
 }
-}
+
 export function* walkChildrenFirst(node: TreeNode): Generator<TreeNode> {
     for (const child of node.children) {
         for (const desc of walkChildrenFirst(child)) {
@@ -56,7 +72,7 @@ export function* walkParents(node: TreeNode): Generator<TreeNode> {
     let curr: TreeNode | null = node.parent;
     while (curr !== null) {
         yield curr
-        curr = node.parent
+        curr = curr.parent
     }
 }
 
@@ -75,6 +91,7 @@ export function searchFromPosition(
     root: TreeNode,
     direction: "up" | "down" | "before" | "after",
     condition: UnNormalizedCondition,
+    selector: dsl.Selector,
     count = 1,
 ) {
     const node = findNodeAtPosition(position, root)
@@ -89,17 +106,16 @@ export function searchFromPosition(
         iterFn = walk.bind(undefined, node)
     }
     else if (direction === "before") {
-        condition = [condition, (node: TreeNode) => position.isBefore(node.startPosition)]
+        condition = [condition, (node: TreeNode) => position.isBefore(vscodePositionFromNodePosition(node.startPosition))]
         iterFn = walk.bind(undefined, root)
     }
     else { // after
-        condition = [condition, (node: TreeNode) => position.isAfter(node.endPosition)]
+        condition = [condition, (node: TreeNode) => position.isAfter(vscodePositionFromNodePosition(node.endPosition))]
         iterFn = walk.bind(undefined, root)
     }
     let currCount = 0
     const normalizedCondition = normalizeCondition(condition)
     for (const node of iterFn()) {
-        console.log(node.type)
         if (normalizedCondition(node)) {
             currCount++
             if (currCount === count) {
@@ -107,12 +123,11 @@ export function searchFromPosition(
             }
         }
     }
-    return null
+    return null;
 }
 
 function findNodeAtPosition(position: vscode.Position, root: TreeNode) {
-    for (const node of walk(root)) {
-        console.log(node, position)
+    for (const node of walkChildrenFirst(root)) {
         if (doesNodeContainPosition(node, position)) {
             return node
         }
@@ -120,13 +135,28 @@ function findNodeAtPosition(position: vscode.Position, root: TreeNode) {
     return null
 }
 
+function matchNode(node: TreeNode, selector: dsl.Selector) {
+    
+}
+function matchNodes(nodes: TreeNode[], selector: dsl.Selector) {
+
+}
+
+function vscodePositionFromNodePosition(nodePosition: { row: number, column: number }) {
+    return new vscode.Position(nodePosition.row, nodePosition.column)
+}
+
 function doesNodeContainPosition(node: TreeNode, position: vscode.Position) {
-    return position.isAfterOrEqual(node.startPosition) && position.isBeforeOrEqual(node.endPosition)
+    const nodeStartPosition = vscodePositionFromNodePosition(node.startPosition)
+    const nodeEndPosition = vscodePositionFromNodePosition(node.endPosition)
+    return position.isAfterOrEqual(nodeStartPosition) && position.isBeforeOrEqual(nodeEndPosition)
 }
 
 export function selectionFromTreeNode(node: TreeNode, reverse = false): vscode.Selection {
+    const startPosition = vscodePositionFromNodePosition(node.startPosition)
+    const endPosition = vscodePositionFromNodePosition(node.endPosition)
     if (reverse) {
-        return new vscode.Selection(node.endPosition, node.startPosition)
+        return new vscode.Selection(endPosition, startPosition)
     }
-    return new vscode.Selection(node.startPosition, node.endPosition)
+    return new vscode.Selection(startPosition, endPosition)
 }

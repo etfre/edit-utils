@@ -53,6 +53,7 @@ type SelectNodeRequest = RequestBase & {
     method: "SELECT_NODE",
     params: {
         type: string,
+        pattern: string,
         direction: "up" | "down" | "before" | "after"
         count?: number
     }
@@ -77,9 +78,9 @@ type ClientResponse = { jsonrpc: "2.0", id: string } & ({ result: ClientResponse
 
 type TreeNode = {
     children: Array<TreeNode>
-    endPosition: vscode.Position
+    endPosition: {row: number, column: number}
     parent: TreeNode | null
-    startPosition: vscode.Position
+    startPosition: {row: number, column: number}
     type: string
     text: string
 }

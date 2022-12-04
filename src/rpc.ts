@@ -27,7 +27,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "GET_ACTIVE_DOCUMENT": handlers.handleGetActiveDocument,
 }
 
-export async function messageRPCClient(msg: ClientResponse) {
+export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
     const messageStr = JSON.stringify(msg)
     const prom = new Promise<void>((resolve, reject) => {
         try {
@@ -69,8 +69,10 @@ async function handleClientMessage(msg: ClientRequest) {
         if (editor) {
             try {
                 result = await handler(editor, msg.params)
+                throw new Error("adasdda")
             }
             catch (e) {
+                console.trace()
                 errorMsg = "Handler error " + e;
             }
         }
@@ -81,28 +83,42 @@ async function handleClientMessage(msg: ClientRequest) {
     if (errorMsg !== null) {
         const error: ClientResponseError = { code: 0, message: errorMsg, data: errorData }
         const resp: ClientResponse = { jsonrpc: "2.0", error, id: msg.id }
-        messageRPCClient(resp)
+        return resp;
+
     }
     else {
         const resp: ClientResponse = { jsonrpc: "2.0", result, id: msg.id }
+        return resp;
         messageRPCClient(resp)
     }
 }
 
 async function handleRpcInputFileChange(path: string) {
-    readFile(path, { encoding: 'utf-8' }, function (err, data) {
+    readFile(path, { encoding: 'utf-8' }, async (err, data) => {
         if (!err) {
-            const clientMsg: ClientRequest = JSON.parse(data);
-            const messageId = clientMsg.id
-            if (processedClientMessageIds.includes(messageId)) {
-                return
+            const responses: ClientResponse[] = []
+            const clientMessage: ClientRequest | ClientRequest[] = JSON.parse(data);
+            const isMultiple = Array.isArray(clientMessage);
+            const clientMessages = isMultiple ? clientMessage : [clientMessage]
+            for (const clientMsg of clientMessages) {
+                const messageId = clientMsg.id
+                if (processedClientMessageIds.includes(messageId)) {
+                    return
+                }
+                processedClientMessageIds.push(messageId)
+                if (processedClientMessageIds.length > processedClientMessageIdsMaxSize) {
+                    processedClientMessageIds.shift()
+                }
+                const resp = await handleClientMessage(clientMsg)
+                responses.push(resp)
+                messageRPCClient(resp)
             }
-            processedClientMessageIds.push(messageId)
-            if (processedClientMessageIds.length > processedClientMessageIdsMaxSize) {
-                processedClientMessageIds.shift()
+            if (isMultiple) {
+                messageRPCClient(responses)
             }
-            handleClientMessage(clientMsg)
-            console.log('received data: ' + data);
+            else {
+                messageRPCClient(responses[0])
+            }
         }
         else {
             console.log(err);
