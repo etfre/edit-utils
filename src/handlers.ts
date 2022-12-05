@@ -48,11 +48,14 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
     ast.dump(root)
-    const rootSelector = dsl.parseInput(params.pattern)
-    const cursorPosition = editor.selection.anchor;
-    const nodeToSelect = ast.searchFromPosition(cursorPosition, root, params.direction, params.type, rootSelector)
-    if (nodeToSelect !== null) {
-        const selection = ast.selectionFromTreeNode(nodeToSelect, false)
-        editor.selections = [selection]
+    for (const pattern of params.patterns) {
+        const rootSelector = dsl.parseInput(pattern)
+        const cursorPosition = editor.selection.anchor;
+        const selectedNodes = ast.searchFromPosition(cursorPosition, root, params.direction, params.type, rootSelector)
+        if (selectedNodes.length > 0) {
+            const selection = ast.selectionFromNodeArray(selectedNodes, false);
+            editor.selections = [selection];
+            break;
+        }
     }
 }

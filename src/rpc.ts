@@ -69,10 +69,9 @@ async function handleClientMessage(msg: ClientRequest) {
         if (editor) {
             try {
                 result = await handler(editor, msg.params)
-                throw new Error("adasdda")
             }
             catch (e) {
-                console.trace()
+                console.error((e as any).stack)
                 errorMsg = "Handler error " + e;
             }
         }

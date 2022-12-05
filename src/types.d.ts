@@ -54,6 +54,7 @@ type SelectNodeRequest = RequestBase & {
     params: {
         type: string,
         pattern: string,
+        patterns: string[],
         direction: "up" | "down" | "before" | "after"
         count?: number
     }

@@ -16,23 +16,17 @@ type Slice = {
     step: number
 }
 
-type NameState = string
+type SliceOrIndexState = null |
+{ stage: "index" } |
+{ stage: "stop", slice: Slice } |
+{ stage: "step", slice: Slice } |
+    ({ stage: "done", index: number } | { stage: "done", slice: Slice })
 
 type ParseState = {
     name: string
     numStr: string
     isOptional: boolean
-    indexOrSliceState: null |
-    { stage: "index" } |
-    { stage: "stop", slice: Slice } |
-    { stage: "step", slice: Slice } |
-    ({ stage: "done", index: number } | { stage: "done", slice: Slice })
-}
-
-const DEFAULT_SLICE_VALUES = {
-    start: 0,
-    stop: null,
-    step: 1,
+    indexOrSliceState: SliceOrIndexState
 }
 
 function assertDefaultStates(states: Partial<ParseState> = {}) {
@@ -108,20 +102,25 @@ function transitionIndexOrSliceState(
     }
     if (indexOrSliceState.stage === "index") {
         if (char === "]") {
-            if (isEmptyNumStr) { // treat empty index as full slice, e.g. dictionary.item[]
+            // treat empty index as full slice, e.g. dictionary.pair[] to select all pairs in a dictionary
+            if (isEmptyNumStr) {
                 return { stage: "done", slice: { start: 0, stop: null, step: 1 } }
             }
             return { stage: "done", index: parseNumStr(numStr) }
         }
         const start = isEmptyNumStr ? 0 : parseNumStr(numStr)
-        return { stage: "step", slice: { start, stop: null, step: 1 } }
+        return { stage: "stop", slice: { start, stop: null, step: 1 } }
     }
+    const slice = indexOrSliceState.slice
     if (indexOrSliceState.stage === "stop") { // second colon
-        return { stage: "step", slice: { ...indexOrSliceState.slice, stop: isEmptyNumStr ? null : parseNumStr(numStr) } }
+        const stop = isEmptyNumStr ? null : parseNumStr(numStr)
+        const stage: any = char === "]" ? "done" : "step"
+        return { stage, slice: { ...slice, stop } }
     }
     if (indexOrSliceState.stage === "step") { // ] for slices
         assert(char === "]", "Already on slice step, too many : characters")
-        return { stage: "done", slice: { ...indexOrSliceState.slice, step: isEmptyNumStr ? 1 : parseNumStr(numStr) } }
+        const step = isEmptyNumStr ? 1 : parseNumStr(numStr)
+        return { stage: "done", slice: { ...slice, step } }
     }
     throw new Error("???")
 }
@@ -206,9 +205,23 @@ export function parseInput(input: string): Selector {
     if (root === null) {
         throw new Error("No Selector successfully parsed")
     }
+    // simpler if root is always a single node
+    if (isMultiple(root)) {
+        const newRoot: Selector = {
+            type: "Selector",
+            isOptional: false,
+            isWildcard: true,
+            name: "*",
+            child: root,
+            parent: null,
+            index: null,
+            slice: null,
+        }
+        root = newRoot
+    }
     return root
 }
 
 export function isMultiple(selector: Selector) {
-    return selector.slice !== null
+    return selector.slice !== null || selector.index !== null
 }

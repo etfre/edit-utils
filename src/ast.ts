@@ -1,5 +1,6 @@
 import * as vscode from "vscode"
 import * as dsl from "./dsl"
+import { sliceArray } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -38,7 +39,7 @@ function normalizeCondition(condition: UnNormalizedCondition): NormalizedConditi
 export function dump(node: TreeNode): any {
     const type = node.type
     if (node.parent) {
-       console.log(`${node.parent.type} => ${type}`)
+        console.log(`${node.parent.type} => ${type}`)
     }
     else {
         console.log(type)
@@ -93,14 +94,23 @@ export function searchFromPosition(
     condition: UnNormalizedCondition,
     selector: dsl.Selector,
     count = 1,
-) {
+): TreeNode[] {
     const node = findNodeAtPosition(position, root)
     if (node === null) {
-        return null
+        return []
     }
     let iterFn: any;
     if (direction === "up") {
         iterFn = walkParents.bind(undefined, node)
+        const toCheck = [node].concat(Array.from(walkParents(node))).slice(0, -1)
+        let highestMatches: TreeNode[] = []
+        for (let parent of toCheck) {
+            const matches = matchSingleNode(parent, selector)
+            if (matches.length > 0) {
+                highestMatches = matches
+            }
+        }
+        return highestMatches
     }
     else if (direction === "down") {
         iterFn = walk.bind(undefined, node)
@@ -113,17 +123,7 @@ export function searchFromPosition(
         condition = [condition, (node: TreeNode) => position.isAfter(vscodePositionFromNodePosition(node.endPosition))]
         iterFn = walk.bind(undefined, root)
     }
-    let currCount = 0
-    const normalizedCondition = normalizeCondition(condition)
-    for (const node of iterFn()) {
-        if (normalizedCondition(node)) {
-            currCount++
-            if (currCount === count) {
-                return node as TreeNode
-            }
-        }
-    }
-    return null;
+    return [];
 }
 
 function findNodeAtPosition(position: vscode.Position, root: TreeNode) {
@@ -135,11 +135,59 @@ function findNodeAtPosition(position: vscode.Position, root: TreeNode) {
     return null
 }
 
-function matchNode(node: TreeNode, selector: dsl.Selector) {
-    
-}
-function matchNodes(nodes: TreeNode[], selector: dsl.Selector) {
+// function matchNode(node: TreeNode, selector: dsl.Selector) {
+//     return dsl.isMultiple(selector) ? matchMultipleNodes(node, selector) : matchSingleNode(node, selector)
+// }
 
+function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
+    // dictionary.pair[]
+    // dictionary.pair[2]
+    // dictionary.pair.value
+    let matches: TreeNode[] = []
+    let isMatch = selector.isWildcard || selector.name === node.type
+    const childSelector = selector.child
+    const isLeaf = childSelector === null
+    if (isMatch) {
+        if (isLeaf) {
+            matches.push(node)
+        }
+        else {
+            const childIsMultiple = dsl.isMultiple(childSelector)
+            if (childIsMultiple) {
+                matches = matchMultipleNodes(node, selector, childSelector)
+            }
+            else {
+                for (const child of node.children) {
+                    const childResult = matchSingleNode(child, childSelector);
+                    if (childResult.length > 0) {
+                        return [...childResult]
+                    }
+                }
+            }
+        }
+    }
+    else if (selector.isOptional && !isLeaf) {
+        return matchSingleNode(node, childSelector)
+    }
+    return matches
+}
+
+function matchMultipleNodes(parent: TreeNode, parentSelector: dsl.Selector, childSelector: dsl.Selector): TreeNode[] {
+    // index and slice logic should go here I think
+    let matches: TreeNode[] = []
+    for (const node of parent.children) {
+        const nodeMatches = matchSingleNode(node, childSelector)
+        matches = matches.concat(nodeMatches)
+    }
+    if (childSelector.index) {
+        const index = childSelector.index < 0 ? matches.length - 1 + childSelector.index : childSelector.index
+        matches = [matches[index]]
+    }
+    if (childSelector.slice) {
+        const slice = childSelector.slice
+        matches = sliceArray(matches, slice.start, slice.stop, slice.step)
+    }
+    return matches
 }
 
 function vscodePositionFromNodePosition(nodePosition: { row: number, column: number }) {
@@ -159,4 +207,33 @@ export function selectionFromTreeNode(node: TreeNode, reverse = false): vscode.S
         return new vscode.Selection(endPosition, startPosition)
     }
     return new vscode.Selection(startPosition, endPosition)
+}
+
+export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
+    let anchor: vscode.Position | null = null
+    let active: vscode.Position | null = null
+    for (const node of nodes) {
+        const startPosition = vscodePositionFromNodePosition(node.startPosition)
+        const endPosition = vscodePositionFromNodePosition(node.endPosition)
+        if (reverse) {
+            if (anchor === null || endPosition.isAfter(anchor)) {
+                anchor = endPosition
+            }
+            if (active === null || startPosition.isBefore(active)) {
+                active = startPosition
+            }
+        }
+        else {
+            if (anchor === null || startPosition.isBefore(anchor)) {
+                anchor = startPosition
+            }
+            if (active === null || endPosition.isAfter(active)) {
+                active = endPosition
+            }
+        }
+    }
+    if (anchor === null || active === null) {
+        throw new Error("At least one node is required for a selection")
+    }
+    return new vscode.Selection(anchor, active)
 }
