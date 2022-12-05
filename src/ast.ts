@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import * as dsl from "./dsl"
-import { sliceArray } from "./util";
+import { range, sliceArray } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -36,18 +36,21 @@ function normalizeCondition(condition: UnNormalizedCondition): NormalizedConditi
     return condition
 }
 
-export function dump(node: TreeNode): any {
+export function dump(node: TreeNode, recursive = false): any {
     const type = node.type
-    if (node.parent) {
+    console.log('--------------------')
+    if (node.parent !== null && node.parent !== undefined) {
         console.log(`${node.parent.type} => ${type}`)
     }
     else {
         console.log(type)
     }
     console.log(node.text)
-    console.log('--------------------')
-    for (const child of node.children) {
-        dump(child)
+    console.log('--------------------\n')
+    if (recursive) {
+        for (const child of node.children) {
+            dump(child)
+        }
     }
 }
 
@@ -58,6 +61,19 @@ export function* walk(node: TreeNode): Generator<TreeNode> {
             yield desc
         }
     }
+}
+
+export function* pathsChildrenFirst(
+    node: TreeNode,
+    indexInParent: number | null = null,
+): Generator<{ indexInParent: number | null, node: TreeNode }[]> {
+    const path = [{ indexInParent, node }]
+    for (const [childIndex, child] of node.children.entries()) {
+        for (const descPath of pathsChildrenFirst(child, childIndex)) {
+            yield path.concat(descPath)
+        }
+    }
+    yield path;
 }
 
 export function* walkChildrenFirst(node: TreeNode): Generator<TreeNode> {
@@ -90,19 +106,18 @@ export function search(root: TreeNode, condition: UnNormalizedCondition) {
 export function searchFromPosition(
     position: vscode.Position,
     root: TreeNode,
-    direction: "up" | "down" | "before" | "after",
+    direction: "up" | "before" | "after",
     condition: UnNormalizedCondition,
     selector: dsl.Selector,
     count = 1,
 ): TreeNode[] {
     const node = findNodeAtPosition(position, root)
-    if (node === null) {
+    const path = findNodePathToPosition(position, root);
+    if (node === null || path === null) {
         return []
     }
-    let iterFn: any;
     if (direction === "up") {
-        iterFn = walkParents.bind(undefined, node)
-        const toCheck = [node].concat(Array.from(walkParents(node))).slice(0, -1)
+        const toCheck = path.map(x => x.node).slice(0, -1)
         let highestMatches: TreeNode[] = []
         for (let parent of toCheck) {
             const matches = matchSingleNode(parent, selector)
@@ -112,18 +127,37 @@ export function searchFromPosition(
         }
         return highestMatches
     }
-    else if (direction === "down") {
-        iterFn = walk.bind(undefined, node)
-    }
-    else if (direction === "before") {
-        condition = [condition, (node: TreeNode) => position.isBefore(vscodePositionFromNodePosition(node.startPosition))]
-        iterFn = walk.bind(undefined, root)
-    }
-    else { // after
-        condition = [condition, (node: TreeNode) => position.isAfter(vscodePositionFromNodePosition(node.endPosition))]
-        iterFn = walk.bind(undefined, root)
+    else { // before or after
+        const reversedPath = path.slice(1).reverse()
+        for (const { indexInParent, node } of reversedPath) {
+            if (indexInParent === null) {
+                throw new Error("")
+            }
+            const parent = node.parent as TreeNode
+            const siblingIter = direction === "before" ?
+                range(indexInParent - 1, -1, -1) :
+                range(indexInParent + 1, parent.children.length)
+            dump(parent)
+            for (const i of siblingIter) {
+                const sibling = parent.children[i]
+                const matches = matchSingleNode(sibling, selector)
+                if (matches.length > 0) {
+                    return matches
+                }
+            }
+        }
     }
     return [];
+}
+
+function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
+    for (const path of pathsChildrenFirst(root)) {
+        const node = path[path.length - 1].node;
+        if (doesNodeContainPosition(node, position)) {
+            return path;
+        }
+    }
+    return null;
 }
 
 function findNodeAtPosition(position: vscode.Position, root: TreeNode) {

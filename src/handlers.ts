@@ -47,7 +47,6 @@ export async function handleSelectInSurround(editor: vscode.TextEditor, params: 
 export async function handleSelectNode(editor: vscode.TextEditor, params: SelectNodeRequest['params']) {
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
-    ast.dump(root)
     for (const pattern of params.patterns) {
         const rootSelector = dsl.parseInput(pattern)
         const cursorPosition = editor.selection.anchor;
