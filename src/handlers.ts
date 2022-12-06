@@ -50,7 +50,7 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
     for (const pattern of params.patterns) {
         const rootSelector = dsl.parseInput(pattern)
         const cursorPosition = editor.selection.anchor;
-        const selectedNodes = ast.searchFromPosition(cursorPosition, root, params.direction, params.type, rootSelector)
+        const selectedNodes = ast.searchFromPosition(cursorPosition, root, params.direction, rootSelector)
         if (selectedNodes.length > 0) {
             const selection = ast.selectionFromNodeArray(selectedNodes, false);
             editor.selections = [selection];

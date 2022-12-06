@@ -12,45 +12,11 @@ export async function setup() {
     parseTreeExtensionExports = await parseTreeExtension.activate()
 }
 
-type UnNormalizedCondition = string | Array<UnNormalizedCondition> | undefined | null | ((node: TreeNode) => boolean)
-type NormalizedCondition = (node: TreeNode) => boolean
-
-function normalizeCondition(condition: UnNormalizedCondition): NormalizedCondition {
-    if (Array.isArray(condition)) {
-        const childFns: NormalizedCondition[] = condition.map(x => normalizeCondition(x))
-        return (node: TreeNode) => {
-            for (const fn of childFns) {
-                if (!fn(node)) {
-                    return false;
-                }
-            }
-            return true;
-        }
-    }
-    if (condition === null || condition === undefined) {
-        return (node: TreeNode) => true
-    }
-    if (typeof condition === "string") {
-        return (node: TreeNode) => node.type === condition
-    }
-    return condition
-}
-
-export function dump(node: TreeNode, recursive = false): any {
+export function dump(node: TreeNode, indent = 0): any {
     const type = node.type
-    console.log('--------------------')
-    if (node.parent !== null && node.parent !== undefined) {
-        console.log(`${node.parent.type} => ${type}`)
-    }
-    else {
-        console.log(type)
-    }
-    console.log(node.text)
-    console.log('--------------------\n')
-    if (recursive) {
-        for (const child of node.children) {
-            dump(child)
-        }
+    console.log(`${' '.repeat(indent)}${type}`)
+    for (const child of node.children) {
+        dump(child, indent + 2)
     }
 }
 
@@ -93,56 +59,50 @@ export function* walkParents(node: TreeNode): Generator<TreeNode> {
     }
 }
 
-export function search(root: TreeNode, condition: UnNormalizedCondition) {
-    condition = normalizeCondition(condition)
-    for (const node of walk(root)) {
-        if (condition(node)) {
-            return node
-        }
-    }
-    return null
-}
-
 export function searchFromPosition(
     position: vscode.Position,
     root: TreeNode,
     direction: "up" | "before" | "after",
-    condition: UnNormalizedCondition,
     selector: dsl.Selector,
     count = 1,
 ): TreeNode[] {
-    const node = findNodeAtPosition(position, root)
     const path = findNodePathToPosition(position, root);
-    if (node === null || path === null) {
+    if (path === null) {
         return []
     }
     if (direction === "up") {
-        const toCheck = path.map(x => x.node).slice(0, -1)
-        let highestMatches: TreeNode[] = []
+        const toCheck = path.map(x => x.node).reverse()
         for (let parent of toCheck) {
             const matches = matchSingleNode(parent, selector)
             if (matches.length > 0) {
-                highestMatches = matches
+                return matches
             }
         }
-        return highestMatches
     }
     else { // before or after
-        const reversedPath = path.slice(1).reverse()
-        for (const { indexInParent, node } of reversedPath) {
-            if (indexInParent === null) {
-                throw new Error("")
-            }
-            const parent = node.parent as TreeNode
+        const leaf = path[path.length - 1].node
+        const reversedPath = path.
+            slice(1).
+            map(x => {
+                if (x.node.parent === null || x.indexInParent === null) {
+                    throw new Error("")
+                }
+                return { parent: x.node.parent, indexOfChild: x.indexInParent }
+            }).
+            reverse()
+        for (const { indexOfChild, parent } of reversedPath) {
             const siblingIter = direction === "before" ?
-                range(indexInParent - 1, -1, -1) :
-                range(indexInParent + 1, parent.children.length)
-            dump(parent)
+                range(indexOfChild, -1, -1) :
+                range(indexOfChild, parent.children.length)
             for (const i of siblingIter) {
                 const sibling = parent.children[i]
-                const matches = matchSingleNode(sibling, selector)
-                if (matches.length > 0) {
-                    return matches
+                for (const testNode of walkChildrenFirst(sibling)) {
+                    const matches = matchSingleNode(testNode, selector)
+                    if (matches.length > 0) {
+                        if (matches.length === 1 && !isSameNode(leaf, matches[matches.length - 1])) {
+                            return matches
+                        }
+                    }
                 }
             }
         }
@@ -160,19 +120,6 @@ function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
     return null;
 }
 
-function findNodeAtPosition(position: vscode.Position, root: TreeNode) {
-    for (const node of walkChildrenFirst(root)) {
-        if (doesNodeContainPosition(node, position)) {
-            return node
-        }
-    }
-    return null
-}
-
-// function matchNode(node: TreeNode, selector: dsl.Selector) {
-//     return dsl.isMultiple(selector) ? matchMultipleNodes(node, selector) : matchSingleNode(node, selector)
-// }
-
 function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
     // dictionary.pair[]
     // dictionary.pair[2]
@@ -188,7 +135,7 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
         else {
             const childIsMultiple = dsl.isMultiple(childSelector)
             if (childIsMultiple) {
-                matches = matchMultipleNodes(node, selector, childSelector)
+                matches = matchMultipleNodes(node*, childSelector)
             }
             else {
                 for (const child of node.children) {
@@ -206,8 +153,7 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
     return matches
 }
 
-function matchMultipleNodes(parent: TreeNode, parentSelector: dsl.Selector, childSelector: dsl.Selector): TreeNode[] {
-    // index and slice logic should go here I think
+function matchMultipleNodes(parent: TreeNode,childSelector: dsl.Selector): TreeNode[] {
     let matches: TreeNode[] = []
     for (const node of parent.children) {
         const nodeMatches = matchSingleNode(node, childSelector)
@@ -270,4 +216,11 @@ export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
         throw new Error("At least one node is required for a selection")
     }
     return new vscode.Selection(anchor, active)
+}
+
+function isSameNode(a: TreeNode, b: TreeNode) {
+    return a.startPosition.column === b.startPosition.column &&
+        a.endPosition.column === b.endPosition.column &&
+        a.text === b.text &&
+        a.type === b.type
 }
