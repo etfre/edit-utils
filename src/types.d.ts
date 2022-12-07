@@ -78,9 +78,12 @@ type ClientResponseError = {
 type ClientResponse = { jsonrpc: "2.0", id: string } & ({ result: ClientResponseResult } | { error: ClientResponseError })
 
 type TreeNode = {
+    childCount: number
     children: Array<TreeNode>
+    endIndex: number
     endPosition: {row: number, column: number}
     parent: TreeNode | null
+    startIndex: number
     startPosition: {row: number, column: number}
     type: string
     text: string

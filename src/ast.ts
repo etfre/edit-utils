@@ -51,19 +51,11 @@ export function* walkChildrenFirst(node: TreeNode): Generator<TreeNode> {
     yield node;
 }
 
-export function* walkParents(node: TreeNode): Generator<TreeNode> {
-    let curr: TreeNode | null = node.parent;
-    while (curr !== null) {
-        yield curr
-        curr = curr.parent
-    }
-}
-
 export function searchFromPosition(
     position: vscode.Position,
     root: TreeNode,
     direction: "up" | "before" | "after",
-    selector: dsl.Selector,
+    selectors: dsl.Selector[],
     count = 1,
 ): TreeNode[] {
     const path = findNodePathToPosition(position, root);
@@ -73,14 +65,17 @@ export function searchFromPosition(
     if (direction === "up") {
         const toCheck = path.map(x => x.node).reverse()
         for (let parent of toCheck) {
-            const matches = matchSingleNode(parent, selector)
+            const { matches, selector } = matchNodeEntry(parent, selectors)
             if (matches.length > 0) {
-                return matches
+                const formattedMatches = matches.map(match => {
+                    const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
+                    return addedOptionals.length === 0 ? match : addedOptionals[0]
+                })
+                return formattedMatches
             }
         }
     }
     else { // before or after
-        const leaf = path[path.length - 1].node
         const reversedPath = path.
             slice(1).
             map(x => {
@@ -90,24 +85,73 @@ export function searchFromPosition(
                 return { parent: x.node.parent, indexOfChild: x.indexInParent }
             }).
             reverse()
-        for (const { indexOfChild, parent } of reversedPath) {
-            const siblingIter = direction === "before" ?
-                range(indexOfChild, -1, -1) :
-                range(indexOfChild, parent.children.length)
-            for (const i of siblingIter) {
-                const sibling = parent.children[i]
-                for (const testNode of walkChildrenFirst(sibling)) {
-                    const matches = matchSingleNode(testNode, selector)
-                    if (matches.length > 0) {
-                        if (matches.length === 1 && !isSameNode(leaf, matches[matches.length - 1])) {
-                            return matches
-                        }
-                    }
-                }
-            }
-        }
+        return matchDirection(direction, selectors, reversedPath)
     }
     return [];
+}
+
+function matchDirection(
+    direction: "before" | "after",
+    selectors: dsl.Selector[],
+    childFirstPath: { indexOfChild: number, parent: TreeNode }[],
+    matchTarget: number = 1
+): TreeNode[] {
+    let gotMatchContainingLeaf = false;
+    const seen = new Set<TreeNode>();
+    for (const nodeDetails of iterDirection(direction, childFirstPath)) {
+        if (seen.has(nodeDetails.node)) {
+            continue
+        }
+        const { matches, selector } = matchNodeEntry(nodeDetails.node, selectors)
+        if (matches.length === 0) {
+            continue;   
+        }
+        const formattedMatches = matches.map(match => {
+            const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
+            for (const node of addedOptionals) {
+                seen.add(node)
+            }
+            return addedOptionals.length === 0 ? match : addedOptionals[0]
+        })
+        /* 
+        Skip the first match if it contains our starting point, for example:
+
+        def foo():
+            def bar():
+                pass
+
+        If the cursor is in pass and the command is "select previous function definition" then
+        we should skip bar and go to foo because bar is the current function definition and
+        foo if the previous one.
+        */
+        if (nodeDetails.isAncestor && !gotMatchContainingLeaf) {
+            gotMatchContainingLeaf = true;
+            continue;
+        }
+        return formattedMatches;
+    }
+    return [];
+}
+
+function* iterDirection(
+    direction: "before" | "after",
+    childFirstPath: { indexOfChild: number, parent: TreeNode }[]
+): Generator<{ node: TreeNode, isAncestor: boolean }> {
+    for (const { indexOfChild, parent } of childFirstPath) {
+        const siblingIter = direction === "before" ?
+            range(indexOfChild - 1, -1, -1) :
+            range(indexOfChild + 1, parent.children.length)
+        for (const siblingIdx of siblingIter) {
+            const sibling = parent.children[siblingIdx]
+            yield { node: sibling, isAncestor: false }
+        }
+        yield { node: parent, isAncestor: true }
+    }
+}
+
+function nodesOverlap(a: TreeNode, b: TreeNode) {
+    return (a.startIndex > b.startIndex && a.startIndex < b.endIndex) ||
+        a.endIndex > b.startIndex && a.endIndex < b.endIndex
 }
 
 function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
@@ -125,37 +169,83 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
     // dictionary.pair[2]
     // dictionary.pair.value
     let matches: TreeNode[] = []
-    let isMatch = selector.isWildcard || selector.name === node.type
+    let isMatch = testNode(node, selector)
     const childSelector = selector.child
-    const isLeaf = childSelector === null
+    const isSelectorLeaf = childSelector === null
     if (isMatch) {
-        if (isLeaf) {
+        if (isSelectorLeaf) {
             matches.push(node)
         }
         else {
-            const childIsMultiple = dsl.isMultiple(childSelector)
-            if (childIsMultiple) {
-                matches = matchMultipleNodes(node*, childSelector)
-            }
-            else {
-                for (const child of node.children) {
-                    const childResult = matchSingleNode(child, childSelector);
-                    if (childResult.length > 0) {
-                        return [...childResult]
-                    }
-                }
-            }
+            matchNodeChildren(node.children, childSelector);
         }
     }
-    else if (selector.isOptional && !isLeaf) {
-        return matchSingleNode(node, childSelector)
+    else if (selector.isOptional && !isSelectorLeaf) {
+        return matchSingleNode(node, childSelector);
     }
     return matches
 }
 
-function matchMultipleNodes(parent: TreeNode,childSelector: dsl.Selector): TreeNode[] {
+function testNode(node: TreeNode, selector: dsl.Selector) {
+    return selector.isWildcard || selector.name === node.type
+}
+
+function matchNodeChildren(children: TreeNode[], selector: dsl.Selector) {
+    const childIsMultiple = dsl.isMultiple(selector)
+    if (childIsMultiple) {
+        return matchMultipleNodes(children, selector);
+    }
+    else {
+        for (const child of children) {
+            const childResult = matchSingleNode(child, selector);
+            if (childResult.length > 0) {
+                return [...childResult];
+            }
+        }
+    }
+    return []
+}
+
+function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[] {
+    let currSelector = selector;
+    let optionalsBeforeMatch = 0;
+    while (!testNode(match, currSelector)) {
+        optionalsBeforeMatch++
+        currSelector = currSelector.child as dsl.Selector
+    }
+    // only add optional matches at start if matched depth is one, e.g. decorated_function?.function_definition
+    // but not decorated_function?.function_definition.name
+    let addedOptionals: TreeNode[] = []
+    if (currSelector.child === null) {
+        let parentTestNode = match.parent;
+        let parentTestSelector = currSelector.parent as dsl.Selector
+        for (let i = 0; i < optionalsBeforeMatch; i++) {
+            if (parentTestNode === null) {
+                break
+            }
+            if (testNode(parentTestNode, parentTestSelector)) {
+                addedOptionals.push(parentTestNode)
+                parentTestNode = parentTestNode;
+                parentTestSelector = parentTestSelector.parent as dsl.Selector
+            }
+        }
+    }
+    return addedOptionals.reverse()
+}
+
+function matchNodeEntry(node: TreeNode, selectors: dsl.Selector[]): { matches: TreeNode[], selector: dsl.Selector | null } {
+    for (const selector of selectors) {
+        const matches = matchSingleNode(node, selector)
+        if (matches.length > 0) {
+            return { matches, selector }
+        }
+    }
+    return { matches: [], selector: null }
+}
+
+function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): TreeNode[] {
     let matches: TreeNode[] = []
-    for (const node of parent.children) {
+    for (const node of nodes) {
         const nodeMatches = matchSingleNode(node, childSelector)
         matches = matches.concat(nodeMatches)
     }
