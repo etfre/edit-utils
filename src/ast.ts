@@ -109,12 +109,12 @@ function matchDirection(
         const formattedMatches = matches.map(match => {
             const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
             for (const node of addedOptionals) {
+                // use seen so we don't count added optionals multiple times
                 seen.add(node)
             }
             return addedOptionals.length === 0 ? match : addedOptionals[0]
         })
-        /* 
-        Skip the first match if it contains our starting point, for example:
+        /* Skip the first match if it contains our starting point, for example:
 
         def foo():
             def bar():
@@ -122,8 +122,7 @@ function matchDirection(
 
         If the cursor is in pass and the command is "select previous function definition" then
         we should skip bar and go to foo because bar is the current function definition and
-        foo if the previous one.
-        */
+        foo if the previous one. */
         if (nodeDetails.isAncestor && !gotMatchContainingLeaf) {
             gotMatchContainingLeaf = true;
             continue;
@@ -154,6 +153,7 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
         a.endIndex > b.startIndex && a.endIndex < b.endIndex
 }
 
+// TODO: this can be a recursive binary search for O(depth*logn) instead of O(n) performance
 function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
     for (const path of pathsChildrenFirst(root)) {
         const node = path[path.length - 1].node;
