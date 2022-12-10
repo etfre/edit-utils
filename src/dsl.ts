@@ -14,10 +14,11 @@ type Slice = {
     start: number
     stop: number | null
     step: number
+    isFilter: boolean
 }
 
 type SliceOrIndexState = null |
-{ stage: "index" } |
+{ stage: "index", hasFilterPrefix: boolean } |
 { stage: "stop", slice: Slice } |
 { stage: "step", slice: Slice } |
     ({ stage: "done", index: number } | { stage: "done", slice: Slice })
@@ -90,26 +91,30 @@ function linkSelectors(parent: Selector, child: Selector) {
 function transitionIndexOrSliceState(
     indexOrSliceState: ParseState['indexOrSliceState'],
     numStr: ParseState['numStr'],
-    char: "[" | ":" | "]"
+    char: "[" | ":" | "]",
+    prevChar: string | null,
 ): ParseState['indexOrSliceState'] {
     const isEmptyNumStr = numStr.length === 0
     if (indexOrSliceState === null || char === "[") { // check both for type narrowing
         assert(char === "[" && indexOrSliceState === null, "indexOrSliceState must be null for [")
-        return { stage: "index" }
+        const hasFilterPrefix = prevChar === "$"
+        return { stage: "index", hasFilterPrefix }
     }
     if (indexOrSliceState.stage === "done") {
         throw new Error("???")
     }
     if (indexOrSliceState.stage === "index") {
+        const isFilter = indexOrSliceState.hasFilterPrefix
         if (char === "]") {
             // treat empty index as full slice, e.g. dictionary.pair[] to select all pairs in a dictionary
+            assert(!isFilter, "Filter cannot be empty")
             if (isEmptyNumStr) {
-                return { stage: "done", slice: { start: 0, stop: null, step: 1 } }
+                return { stage: "done", slice: { start: 0, stop: null, step: 1, isFilter: false } }
             }
             return { stage: "done", index: parseNumStr(numStr) }
         }
         const start = isEmptyNumStr ? 0 : parseNumStr(numStr)
-        return { stage: "stop", slice: { start, stop: null, step: 1 } }
+        return { stage: "stop", slice: { start, stop: null, step: 1, isFilter } }
     }
     const slice = indexOrSliceState.slice
     if (indexOrSliceState.stage === "stop") { // second colon
@@ -158,14 +163,14 @@ export function parseInput(input: string): Selector {
         }
         else if (char === "[") {
             assert(name.length > 0, "Must have a name for index or slice")
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char)
+            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
         }
         else if (char === ":") {
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char)
+            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
             numStr = ""
         }
         else if (char === "]") {
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char)
+            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
             numStr = ""
         }
         else if (char === "?") {
@@ -186,6 +191,9 @@ export function parseInput(input: string): Selector {
             numStr = newDefault.numStr
             isOptional = newDefault.isOptional
             indexOrSliceState = newDefault.indexOrSliceState
+        }
+        else if (char === "$") {
+
         }
         else {
             throw new Error(`Unexpected character ${char}`)
@@ -223,5 +231,5 @@ export function parseInput(input: string): Selector {
 }
 
 export function isMultiple(selector: Selector) {
-    return selector.slice !== null || selector.index !== null
+    return (selector.slice !== null && !selector.slice.isFilter) || selector.index !== null
 }

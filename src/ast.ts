@@ -177,7 +177,7 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
             matches.push(node)
         }
         else {
-            matchNodeChildren(node.children, childSelector);
+            return matchNodeChildren(node.children, childSelector);
         }
     }
     else if (selector.isOptional && !isSelectorLeaf) {
@@ -196,6 +196,10 @@ function matchNodeChildren(children: TreeNode[], selector: dsl.Selector) {
         return matchMultipleNodes(children, selector);
     }
     else {
+        if (selector.slice?.isFilter) {
+            const slice = selector.slice;
+            children = sliceArray(children, slice.start, slice.stop, slice.step)
+        }
         for (const child of children) {
             const childResult = matchSingleNode(child, selector);
             if (childResult.length > 0) {
@@ -209,7 +213,7 @@ function matchNodeChildren(children: TreeNode[], selector: dsl.Selector) {
 function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[] {
     let currSelector = selector;
     let optionalsBeforeMatch = 0;
-    while (!testNode(match, currSelector)) {
+    while (currSelector.isOptional && !testNode(match, currSelector)) {
         optionalsBeforeMatch++
         currSelector = currSelector.child as dsl.Selector
     }
@@ -249,11 +253,11 @@ function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): Tre
         const nodeMatches = matchSingleNode(node, childSelector)
         matches = matches.concat(nodeMatches)
     }
-    if (childSelector.index) {
+    if (childSelector.index !== null) {
         const index = childSelector.index < 0 ? matches.length - 1 + childSelector.index : childSelector.index
         matches = [matches[index]]
     }
-    if (childSelector.slice) {
+    if (childSelector.slice !== null) {
         const slice = childSelector.slice
         matches = sliceArray(matches, slice.start, slice.stop, slice.step)
     }
