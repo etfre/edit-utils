@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import * as dsl from "./dsl"
-import { range, sliceArray } from "./util";
+import { assert, range, sliceArray } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -20,35 +20,17 @@ export function dump(node: TreeNode, indent = 0): any {
     }
 }
 
-export function* walk(node: TreeNode): Generator<TreeNode> {
-    yield node;
-    for (const child of node.children) {
-        for (const desc of walk(child)) {
-            yield desc
-        }
-    }
-}
-
 export function* pathsChildrenFirst(
     node: TreeNode,
-    indexInParent: number | null = null,
-): Generator<{ indexInParent: number | null, node: TreeNode }[]> {
-    const path = [{ indexInParent, node }]
+): Generator<PathNode> {
     for (const [childIndex, child] of node.children.entries()) {
-        for (const descPath of pathsChildrenFirst(child, childIndex)) {
-            yield path.concat(descPath)
+        for (const pathFromChild of pathsChildrenFirst(child)) {
+            const root = new PathNode(node)
+            root.setChild(pathFromChild, childIndex)
+            yield root;
         }
     }
-    yield path;
-}
-
-export function* walkChildrenFirst(node: TreeNode): Generator<TreeNode> {
-    for (const child of node.children) {
-        for (const desc of walkChildrenFirst(child)) {
-            yield desc
-        }
-    }
-    yield node;
+    yield new PathNode(node);
 }
 
 export function searchFromPosition(
@@ -58,14 +40,15 @@ export function searchFromPosition(
     selectors: dsl.Selector[],
     count = 1,
 ): TreeNode[] {
-    const path = findNodePathToPosition(position, root);
+    const path = findNodePathToPosition(position, root)
     if (path === null) {
         return []
     }
+    const leaf = path.getLeaf();
+    path?.dump()
     if (direction === "up") {
-        const toCheck = path.map(x => x.node).reverse()
-        for (let parent of toCheck) {
-            const { matches, selector } = matchNodeEntry(parent, selectors)
+        for (let pathNode of leaf.iterUp()) {
+            const { matches, selector } = matchNodeEntry(pathNode.node, selectors)
             if (matches.length > 0) {
                 const formattedMatches = matches.map(match => {
                     const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
@@ -76,16 +59,7 @@ export function searchFromPosition(
         }
     }
     else { // before or after
-        const reversedPath = path.
-            slice(1).
-            map(x => {
-                if (x.node.parent === null || x.indexInParent === null) {
-                    throw new Error("")
-                }
-                return { parent: x.node.parent, indexOfChild: x.indexInParent }
-            }).
-            reverse()
-        return matchDirection(direction, selectors, reversedPath)
+        return matchDirection(direction, selectors, leaf)
     }
     return [];
 }
@@ -93,24 +67,24 @@ export function searchFromPosition(
 function matchDirection(
     direction: "before" | "after",
     selectors: dsl.Selector[],
-    childFirstPath: { indexOfChild: number, parent: TreeNode }[],
+    pathLeaf: PathNode,
     matchTarget: number = 1
 ): TreeNode[] {
     let gotMatchContainingLeaf = false;
-    const seen = new Set<TreeNode>();
-    for (const nodeDetails of iterDirection(direction, childFirstPath)) {
-        if (seen.has(nodeDetails.node)) {
+    const seen = new Set<string>();
+    for (const nodeDetails of iterDirection(direction, pathLeaf)) {
+        if (seen.has(encodeNode(nodeDetails.node))) {
             continue
         }
         const { matches, selector } = matchNodeEntry(nodeDetails.node, selectors)
         if (matches.length === 0) {
-            continue;   
+            continue;
         }
         const formattedMatches = matches.map(match => {
             const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
             for (const node of addedOptionals) {
                 // use seen so we don't count added optionals multiple times
-                seen.add(node)
+                seen.add(encodeNode(node))
             }
             return addedOptionals.length === 0 ? match : addedOptionals[0]
         })
@@ -134,9 +108,12 @@ function matchDirection(
 
 function* iterDirection(
     direction: "before" | "after",
-    childFirstPath: { indexOfChild: number, parent: TreeNode }[]
+    pathLeaf: PathNode
 ): Generator<{ node: TreeNode, isAncestor: boolean }> {
-    for (const { indexOfChild, parent } of childFirstPath) {
+    for (const pathNode of pathLeaf.iterUp()) {
+        if (pathNode.parent === null) break;
+        const indexOfChild = pathNode.parent.indexOfChild
+        const parent = pathNode.parent.node.node
         const siblingIter = direction === "before" ?
             range(indexOfChild - 1, -1, -1) :
             range(indexOfChild + 1, parent.children.length)
@@ -156,8 +133,8 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
 // TODO: this can be a recursive binary search for O(depth*logn) instead of O(n) performance
 function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
     for (const path of pathsChildrenFirst(root)) {
-        const node = path[path.length - 1].node;
-        if (doesNodeContainPosition(node, position)) {
+        const leafNode = path.getLeaf().node
+        if (doesNodeContainPosition(leafNode, position)) {
             return path;
         }
     }
@@ -247,6 +224,7 @@ function matchNodeEntry(node: TreeNode, selectors: dsl.Selector[]): { matches: T
     return { matches: [], selector: null }
 }
 
+
 function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): TreeNode[] {
     let matches: TreeNode[] = []
     for (const node of nodes) {
@@ -317,4 +295,70 @@ function isSameNode(a: TreeNode, b: TreeNode) {
         a.endPosition.column === b.endPosition.column &&
         a.text === b.text &&
         a.type === b.type
+}
+
+
+class PathNode {
+
+    parent: { indexOfChild: number, node: PathNode } | null
+    node: TreeNode
+    child: { indexInChildren: number, node: PathNode } | null
+
+    constructor(node: TreeNode) {
+        this.parent = null
+        this.child = null
+        this.node = node
+    }
+
+    isRoot() {
+        return this.parent === null
+    }
+
+    isLeaf() {
+        return this.child === null
+    }
+
+    getRoot(): PathNode {
+        return this.parent === null ? this : this.parent.node.getRoot()
+    }
+
+    getLeaf(): PathNode {
+        return this.child === null ? this : this.child.node.getLeaf()
+    }
+
+    setChild(child: PathNode, index: number) {
+        assert(this.child === null, "Node already has a child")
+        assert(child.parent === null, "Child node already has a parent")
+        this.child = {node: child, indexInChildren: index}
+        child.parent = {node: this, indexOfChild: index}
+    }
+
+    *iterDown(): Generator<PathNode> {
+        yield this
+        if (this.child !== null) {
+            for (const desc of this.child.node.iterDown()) {
+                yield desc
+            }
+        }
+    }
+
+    *iterUp(): Generator<PathNode> {
+        yield this
+        if (this.parent !== null) {
+            for (const ancesctor of this.parent.node.iterUp()) {
+                yield ancesctor
+            }
+        }
+    }
+
+    dump(): void {
+        for (const pathNode of this.iterDown()) {
+            console.log(pathNode.node.type)
+        }
+    }
+
+}
+
+function encodeNode(node: TreeNode) {
+    return `${node.startIndex}_${node.endIndex}_${node.type}`
 }

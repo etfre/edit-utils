@@ -4,7 +4,6 @@ import { watchFile, watch, writeFile, readFile, FSWatcher } from 'fs';
 import { tmpdir } from 'os';
 import * as handlers from "./handlers"
 import { sep, join } from 'path';
-import { walk } from './ast';
 
 const RPC_INPUT_FILE = tmpdir() + sep + "speech-commands-input.json"
 const RPC_OUTPUT_FILE = tmpdir() + sep + "speech-commands-output.json"

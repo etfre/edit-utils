@@ -1,3 +1,5 @@
+import { assert } from "./util"
+
 export type Selector = {
     type: "Selector"
     name: string
@@ -35,12 +37,6 @@ function assertDefaultStates(states: Partial<ParseState> = {}) {
     assert(states.numStr === undefined || states.numStr === "", "Expecting empty number")
     assert(states.isOptional === undefined || states.isOptional === false, "Expecting isOptional to be false")
     assert(states.indexOrSliceState === undefined || states.indexOrSliceState === null, "Expecting indexOrSliceState to be null")
-}
-
-function assert(condition: boolean, message: string) {
-    if (!condition) {
-        throw new Error(message);
-    }
 }
 
 function defaultParseStates(): ParseState {

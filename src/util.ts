@@ -42,3 +42,10 @@ export function backwardsThroughZero(start: number) {
     }
     return arr
 }
+
+
+export function assert(condition: boolean, message: string) {
+    if (!condition) {
+        throw new Error(message);
+    }
+}
