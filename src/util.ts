@@ -6,7 +6,7 @@ export function sliceArray<T>(arr: T[], start: number = 0, stop: number | null =
     return sliced;
 }
 
-function* sliceIndices(arr: any[], start: number, stop: number | null = null, step: number) {
+export function* sliceIndices(arr: any[], start: number, stop: number | null = null, step: number) {
     const arrLength = arr.length
     if (stop === null) stop = arrLength;
     else if (stop < 0) {

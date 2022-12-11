@@ -1,6 +1,6 @@
 import * as vscode from "vscode"
 import * as dsl from "./dsl"
-import { assert, range, sliceArray } from "./util";
+import { assert, range, sliceArray, sliceIndices } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -48,6 +48,10 @@ export function searchFromPosition(
     path?.dump()
     if (direction === "up") {
         for (let pathNode of leaf.iterUp()) {
+            const match = matchNodeEntryUp(pathNode, selectors)
+            if (match !== null) {
+                return [match];
+            }
             const { matches, selector } = matchNodeEntry(pathNode.node, selectors)
             if (matches.length > 0) {
                 const formattedMatches = matches.map(match => {
@@ -223,6 +227,59 @@ function matchNodeEntry(node: TreeNode, selectors: dsl.Selector[]): { matches: T
     }
     return { matches: [], selector: null }
 }
+function matchNodeEntryUp(node: PathNode, selectors: dsl.Selector[]): TreeNode | null {
+    for (const selector of selectors) {
+        const match = matchNodeEntryUpHelper(node, dsl.getLeafSelector(selector))
+        if (match !== null) {
+            return match;
+        }
+    }
+    return null;
+}
+
+function matchNodeEntryUpHelper(node: PathNode, leafSelector: dsl.Selector): TreeNode | null {
+    let currNode: PathNode | null = node;
+    let currSelector: dsl.Selector | null = leafSelector;
+    let firstMatch: TreeNode | null = null;
+    while (currSelector !== null && currNode !== null) {
+        // traversing up we're testing one particular node so any multiple selector doesn't match
+        if (dsl.isMultiple(currSelector)) {
+            return null;
+        }
+        if (testNode(currNode.node, currSelector)) {
+            if (nodeIsFilteredOut(currNode, currSelector)) {
+                return null;
+            }
+            if (firstMatch === null) {
+                firstMatch = currNode.node;
+            }
+            currSelector = currSelector.parent;
+            currNode = currNode.parent === null ? null : currNode.parent.node;
+        }
+        else if (currSelector.isOptional) { // mismatch on an optional field, go to the parent selector
+            currSelector = currSelector.parent;
+        }
+        else { // mismatch on a required field
+            return null;
+        }
+    }
+    return firstMatch;
+}
+
+function nodeIsFilteredOut(node: PathNode, selector: dsl.Selector) {
+    const slice = selector.slice
+    if (slice === null || !slice.isFilter) {
+        return false;
+    }
+    const parent = node.parent;
+    const [children, indexOfChild] = parent === null ? [[node.node], 0] : [parent.node.node.children, parent.indexOfChild];
+    for (const idx of sliceIndices(children, slice.start, slice.stop, slice.step)) {
+        if (idx === indexOfChild) {
+            return false;
+        }
+    }
+    return true;
+}
 
 
 function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): TreeNode[] {
@@ -329,8 +386,8 @@ class PathNode {
     setChild(child: PathNode, index: number) {
         assert(this.child === null, "Node already has a child")
         assert(child.parent === null, "Child node already has a parent")
-        this.child = {node: child, indexInChildren: index}
-        child.parent = {node: this, indexOfChild: index}
+        this.child = { node: child, indexInChildren: index }
+        child.parent = { node: this, indexOfChild: index }
     }
 
     *iterDown(): Generator<PathNode> {

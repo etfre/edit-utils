@@ -229,3 +229,10 @@ export function parseInput(input: string): Selector {
 export function isMultiple(selector: Selector) {
     return (selector.slice !== null && !selector.slice.isFilter) || selector.index !== null
 }
+
+export function getLeafSelector(selector: Selector): Selector {
+    if (selector.child === null) {
+        return selector;
+    }
+    return getLeafSelector(selector.child);
+}
