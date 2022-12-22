@@ -94,7 +94,7 @@ function matchDirection(
             gotMatchContainingLeaf = true;
             continue;
         }
-        return [match];-
+        return [match];
     }
     return [];
 }
