@@ -12,21 +12,21 @@ export type Selector = {
     slice: Slice | null
 }
 
-type Name = {
+export type Name = {
     type: "name"
     value: string
 }
 
-type Wildcard = {
+export type Wildcard = {
     type: "wildcard"
 }
 
-type Choice = {
+export type Choice = {
     type: "choice"
-    options: (string | RuleRef)[]
+    options: (Name | RuleRef)[]
 }
 
-type RuleRef = {
+export type RuleRef = {
     type: "ruleRef"
     ruleName: string
 }
@@ -49,14 +49,6 @@ type ParseState = {
     sliceOrIndexState: SliceOrIndexState
 }
 
-function assertDefaultStates(states: Partial<ParseState> = {}) {
-    assert(states.tokenType === undefined || states.tokenType === null, "Expecting tokenType to be null")
-    assert(states.isOptional === undefined || states.isOptional === false, "Expecting isOptional to be false")
-    assert(states.index === undefined || states.index === null, "Expecting index to be null")
-    assert(states.slice === undefined || states.slice === null, "Expecting slice to be null")
-    assert(states.filter === undefined || states.filter === null, "Expecting filter to be null")
-}
-
 function defaultParseStates(): ParseState {
     const tokenType = null
     const isOptional = false
@@ -73,7 +65,6 @@ function selectorFromParseState(
     index: ParseState['index'],
     sliceState: ParseState['slice'],
     filterState: ParseState['filter'],
-    sliceOrIndexState: ParseState['sliceOrIndexState'],
 ): Selector {
     if (parseTokenType === null) {
         throw new Error("");
@@ -81,7 +72,6 @@ function selectorFromParseState(
     const tokenType: Selector['tokenType'] = parseTokenType.type === "choice" ?
         { options: parseTokenType.options, type: "choice" } :
         { ...parseTokenType };
-    assert(sliceOrIndexState === null)
     const selector: Selector = {
         type: "Selector",
         tokenType: tokenType,
@@ -92,6 +82,7 @@ function selectorFromParseState(
         parent: null,
         child: null
     }
+
     return selector
 }
 
@@ -103,9 +94,6 @@ function linkSelectors(parent: Selector, child: Selector) {
 
 export function parseInput(input: string): Selector {
     const tokens = new Lexer(input).tokenize();
-    for (const token of tokens) {
-        console.log(token.type);
-    }
     let { tokenType, isOptional, index, slice, filter, sliceOrIndexState } = defaultParseStates()
 
     let root: Selector | null = null
@@ -137,8 +125,12 @@ export function parseInput(input: string): Selector {
                         assert(index === null);
                         index = num;
                     }
-                    sliceOrIndexState = null;
                 }
+                else {
+                    assert(!sliceOrIndexState.isFilter)
+                    slice = sliceOrIndexState.slice;
+                }
+                sliceOrIndexState = null;
                 break;
             }
             case "CLOSED_CURLY_BRACE": {
@@ -150,10 +142,21 @@ export function parseInput(input: string): Selector {
                 }
                 break;
             }
+            case "CLOSED_PAREN": {
+                assertIsDefined(sliceOrIndexState);
+                if (sliceOrIndexState.stage === "stop" || sliceOrIndexState.stage === "step") {
+                    assert(sliceOrIndexState.isFilter)
+                    assertIsNullish(filter)
+                    filter = sliceOrIndexState.slice;
+                }
+                break;
+            }
             case "COLON": {
                 assertIsDefined(sliceOrIndexState);
                 if (sliceOrIndexState.stage === "index") {
-                    sliceOrIndexState = { stage: "stop", slice: defaultSlice(), isFilter: false }
+                    const start = sliceOrIndexState.num ?? 0;
+                    const slice = {...defaultSlice(), start}
+                    sliceOrIndexState = { stage: "stop", slice, isFilter: false }
                 }
                 else if (sliceOrIndexState.stage === "start") {
                     sliceOrIndexState = { ...sliceOrIndexState, stage: "stop" }
@@ -164,15 +167,24 @@ export function parseInput(input: string): Selector {
                 }
                 break;
             }
-            case "DOLLAR_SIGN": {
-                break;
-            }
             case "NAME": {
                 if (tokenType === null) {
-                    tokenType = {type: "name", value: token.value}
+                    tokenType = { type: "name", value: token.value }
                 }
                 else if (tokenType.type === "choice") {
-                    tokenType.options.push(token.value)
+                    assert(tokenType.readyForOption)
+                    tokenType.options.push({ type: "name", value: token.value })
+                    tokenType.readyForOption = false;
+                }
+                break;
+            }
+            case "RULE_REF": {
+                if (tokenType === null) {
+                    tokenType = { type: "ruleRef", ruleName: token.ruleName }
+                }
+                else if (tokenType.type === "choice") {
+                    assert(tokenType.readyForOption)
+                    tokenType.options.push({ type: "ruleRef", ruleName: token.ruleName })
                     tokenType.readyForOption = false;
                 }
                 break;
@@ -203,8 +215,11 @@ export function parseInput(input: string): Selector {
                 sliceOrIndexState = { isFilter: true, stage: "start", slice: defaultSlice() }
                 break;
             }
+            case "OPEN_PAREN": {
+                break;
+            }
             case "PERIOD": {
-                const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter, sliceOrIndexState);
+                const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter);
                 if (curr !== null) {
                     linkSelectors(curr, newSelector)
                 }
@@ -221,6 +236,9 @@ export function parseInput(input: string): Selector {
                 sliceOrIndexState = newDefault.sliceOrIndexState
                 break;
             }
+            case "PIPE": {
+                break;
+            }
             default: {
                 const exhaustiveCheck: never = token;
                 throw new Error(`Unexpected token ${exhaustiveCheck}`)
@@ -228,7 +246,7 @@ export function parseInput(input: string): Selector {
         }
     }
     if (tokenType !== null) {
-        const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter, sliceOrIndexState);
+        const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter);
         if (curr !== null) {
             linkSelectors(curr, newSelector)
         }
@@ -258,7 +276,7 @@ export function parseInput(input: string): Selector {
 }
 
 export function isMultiple(selector: Selector) {
-    return selector.slice !== null  || selector.index !== null
+    return selector.slice !== null || selector.index !== null
 }
 
 export function getLeafSelector(selector: Selector): Selector {

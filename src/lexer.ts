@@ -40,12 +40,12 @@ export class Lexer {
         const isLetter = this.isNameChar(char)
 
         if (isLetter) {
-            let name = this.readWhile(x => this.isNameChar(x))
+            const name = this.readWhile(x => this.isNameChar(x))
             return { type: "NAME", value: name }
         }
         else if (char === "-" || this.isDigit(char)) {
             this.advance();
-            let remainder = this.readWhile(x => this.isDigit(x))
+            const remainder = this.readWhile(x => this.isDigit(x))
             if (char === "-" && remainder.length === 0) {
                 throw new Error("Invalid number, got - but no digits");
             }
@@ -71,9 +71,12 @@ export class Lexer {
         else if (char === ".") {
             return { type: "PERIOD" }
         }
-        else if (char === "$") {
-            return { type: "DOLLAR_SIGN" }
+        else if (char === "*") {
+            return { type: "ASTERISK" }
         }
+        // else if (char === "$") {
+        //     return { type: "DOLLAR_SIGN" }
+        // }
         else if (char === "?") {
             return { type: "QUESTION_MARK" }
         }

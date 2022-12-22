@@ -115,6 +115,13 @@ type OpenBracketToken = {
 type ClosedBracketToken = {
     type: "CLOSED_BRACKET"
 }
+type OpenParenToken = {
+    type: "OPEN_PAREN"
+}
+
+type ClosedParenToken = {
+    type: "CLOSED_PAREN"
+}
 
 type ColonToken = {
     type: "COLON"
@@ -124,8 +131,9 @@ type PeriodToken = {
     type: "PERIOD"
 }
 
-type DollarSignToken = {
-    type: "DOLLAR_SIGN"
+type RuleRefToken = {
+    type: "RULE_REF"
+    ruleName: string
 }
 
 type AsteriskToken = {
@@ -136,6 +144,10 @@ type QuestionMarkToken = {
     type: "QUESTION_MARK"
 }
 
+type PipeToken = {
+    type: "PIPE"
+}
+
 type Token = 
     | NameToken 
     | NumberToken
@@ -143,8 +155,11 @@ type Token =
     | ClosedCurlyBraceToken 
     | OpenBracketToken 
     | ClosedBracketToken 
+    | OpenParenToken 
+    | ClosedParenToken 
     | ColonToken 
     | PeriodToken 
-    | DollarSignToken
+    | RuleRefToken
     | AsteriskToken
     | QuestionMarkToken
+    | PipeToken

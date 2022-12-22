@@ -163,27 +163,34 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
 }
 
 function testNode(node: TreeNode, selector: dsl.Selector) {
-    if (selector.tokenType.type === "name") {
-        return selector.tokenType.value === node.type;
+    if (selector.tokenType.type === "name" || selector.tokenType.type === "ruleRef") {
+        return testTokenNameOrRuleRef(node, selector.tokenType);
     }
-    // if (selector.tokenType.type === "choice") {
-    //     return selector.tokenType.options.some(selectorOption => testNode(node, selectorOption);
-    //     return selector.tokenType === node.type;
-    // }
 
-    return selector.tokenType.type === "wildcard"
+    if (selector.tokenType.type === "choice") {
+        return selector.tokenType.options.some(selectorOption => testTokenNameOrRuleRef(node, selectorOption));
+    }
+    assert(selector.tokenType.type === "wildcard")
+    return true;
+}
+
+function testTokenNameOrRuleRef(node: TreeNode, tokenType: dsl.Name | dsl.RuleRef) {
+    if (tokenType.type === "name") {
+        return tokenType.value === node.type;
+    }
+    throw new Error("unimplemented ruleref")
 }
 
 function matchNodeChildren(children: TreeNode[], selector: dsl.Selector) {
     const childIsMultiple = dsl.isMultiple(selector)
+    if (selector.filter !== null) {
+        const filterSlice = selector.filter;
+        children = sliceArray(children, filterSlice.start, filterSlice.stop, filterSlice.step)
+    }
     if (childIsMultiple) {
         return matchMultipleNodes(children, selector);
     }
     else {
-        if (selector.filter !== null) {
-            const filterSlice = selector.filter;
-            children = sliceArray(children, filterSlice.start, filterSlice.stop, filterSlice.step)
-        }
         for (const child of children) {
             const childResult = matchSingleNode(child, selector);
             if (childResult.length > 0) {
@@ -350,14 +357,6 @@ export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
     return new vscode.Selection(anchor, active)
 }
 
-function isSameNode(a: TreeNode, b: TreeNode) {
-    return a.startPosition.column === b.startPosition.column &&
-        a.endPosition.column === b.endPosition.column &&
-        a.text === b.text &&
-        a.type === b.type
-}
-
-
 class PathNode {
 
     parent: { indexOfChild: number, node: PathNode } | null
@@ -424,8 +423,4 @@ class PathNode {
         }
     }
 
-}
-
-function encodeNode(node: TreeNode) {
-    return `${node.startIndex}_${node.endIndex}_${node.type}`
 }
