@@ -1,0 +1,114 @@
+import assert = require("assert");
+
+export class Lexer {
+
+    input: string;
+    pos: number;
+
+    constructor(input: string) {
+        this.input = input;
+        this.pos = 0;
+    }
+
+    *read() {
+        while (!this.isAtEnd()) {
+            yield this.peek();
+            this.advance();
+        }
+    }
+
+    readWhile(condition: (char: string) => boolean): string {
+        let match = ""
+        for (const char of this.read()) {
+            if (!condition(char)) {
+                break;
+            }
+            match += char;
+        }
+        return match;
+    }
+
+    isNameChar(char: string): boolean {
+        return char.match(/[a-z_]/i) !== null
+    }
+
+    isDigit(char: string): boolean {
+        return char.match(/[0-9]/i) !== null
+    }
+
+    readNext(char: string): Token {
+        const isLetter = this.isNameChar(char)
+
+        if (isLetter) {
+            let name = this.readWhile(x => this.isNameChar(x))
+            return { type: "NAME", value: name }
+        }
+        else if (char === "-" || this.isDigit(char)) {
+            this.advance();
+            let remainder = this.readWhile(x => this.isDigit(x))
+            if (char === "-" && remainder.length === 0) {
+                throw new Error("Invalid number, got - but no digits");
+            }
+            const num = parseInt(char + remainder);
+            assert(!isNaN(num))
+            return { type: "NUMBER", value: num }
+        }
+        else if (char === "{") {
+            return { type: "OPEN_CURLY_BRACE" }
+        }
+        else if (char === "}") {
+            return { type: "CLOSED_CURLY_BRACE" }
+        }
+        else if (char === "[") {
+            return { type: "OPEN_BRACKET" }
+        }
+        else if (char === "]") {
+            return { type: "CLOSED_BRACKET" }
+        }
+        else if (char === ":") {
+            return { type: "COLON" }
+        }
+        else if (char === ".") {
+            return { type: "PERIOD" }
+        }
+        else if (char === "$") {
+            return { type: "DOLLAR_SIGN" }
+        }
+        else if (char === "?") {
+            return { type: "QUESTION_MARK" }
+        }
+        throw new Error(`Unrecognized character ${char}`)
+    }
+
+    tokenize(): Token[] {
+        const tokens: Token[] = [];
+        while (!this.isAtEnd()) {
+            const char = this.peek();
+            if (char === " ") {
+                this.advance();
+                continue;
+            }
+            const startPos = this.pos
+            const tok = this.readNext(char);
+            if (this.pos === startPos) {
+                this.advance();
+            }
+            tokens.push(tok)
+        }
+        return tokens;
+    }
+
+    isAtEnd() {
+        return this.pos >= this.input.length;
+    }
+
+    peek(): string {
+        assert(!this.isAtEnd())
+        return this.input[this.pos]
+    }
+
+    advance(): void {
+        this.pos++
+    }
+
+}

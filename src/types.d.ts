@@ -81,10 +81,70 @@ type TreeNode = {
     childCount: number
     children: Array<TreeNode>
     endIndex: number
-    endPosition: {row: number, column: number}
+    endPosition: { row: number, column: number }
     parent: TreeNode | null
     startIndex: number
-    startPosition: {row: number, column: number}
+    startPosition: { row: number, column: number }
     type: string
     text: string
 }
+
+
+type NameToken = {
+    type: "NAME"
+    value: string
+}
+
+type NumberToken = {
+    type: "NUMBER"
+    value: number
+}
+
+type OpenCurlyBraceToken = {
+    type: "OPEN_CURLY_BRACE"
+}
+
+type ClosedCurlyBraceToken = {
+    type: "CLOSED_CURLY_BRACE"
+}
+
+type OpenBracketToken = {
+    type: "OPEN_BRACKET"
+}
+
+type ClosedBracketToken = {
+    type: "CLOSED_BRACKET"
+}
+
+type ColonToken = {
+    type: "COLON"
+}
+
+type PeriodToken = {
+    type: "PERIOD"
+}
+
+type DollarSignToken = {
+    type: "DOLLAR_SIGN"
+}
+
+type AsteriskToken = {
+    type: "ASTERISK"
+}
+
+type QuestionMarkToken = {
+    type: "QUESTION_MARK"
+}
+
+type Token = 
+    | NameToken 
+    | NumberToken
+    | OpenCurlyBraceToken 
+    | ClosedCurlyBraceToken 
+    | OpenBracketToken 
+    | ClosedBracketToken 
+    | ColonToken 
+    | PeriodToken 
+    | DollarSignToken
+    | AsteriskToken
+    | QuestionMarkToken

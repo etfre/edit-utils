@@ -1,80 +1,96 @@
-import { assert } from "./util"
+import { Lexer } from "./lexer"
+import { assert, assertIsDefined, assertIsNullish, isNullish } from "./util"
 
 export type Selector = {
     type: "Selector"
-    name: string
+    tokenType: Name | Choice | RuleRef | Wildcard
     isOptional: boolean
-    isWildcard: boolean
     parent: Selector | null
     child: Selector | null
     index: number | null
+    filter: Slice | null
     slice: Slice | null
 }
+
+type Name = {
+    type: "name"
+    value: string
+}
+
+type Wildcard = {
+    type: "wildcard"
+}
+
+type Choice = {
+    type: "choice"
+    options: (string | RuleRef)[]
+}
+
+type RuleRef = {
+    type: "ruleRef"
+    ruleName: string
+}
+
+type SliceOrIndexState = null | { stage: "index", num?: number } | { isFilter: boolean, stage: "start" | "stop" | "step", slice: Slice }
 
 
 type Slice = {
     start: number
     stop: number | null
     step: number
-    isFilter: boolean
 }
 
-type SliceOrIndexState = null |
-{ stage: "index", hasFilterPrefix: boolean } |
-{ stage: "stop", slice: Slice } |
-{ stage: "step", slice: Slice } |
-    ({ stage: "done", index: number } | { stage: "done", slice: Slice })
-
 type ParseState = {
-    name: string
-    numStr: string
+    tokenType: null | Name | RuleRef | Wildcard | (Choice & { isDone: boolean, readyForOption: boolean })
     isOptional: boolean
-    indexOrSliceState: SliceOrIndexState
+    index: number | null
+    slice: Slice | null
+    filter: Slice | null
+    sliceOrIndexState: SliceOrIndexState
 }
 
 function assertDefaultStates(states: Partial<ParseState> = {}) {
-    assert(states.name === undefined || states.name === "", "Expecting empty name")
-    assert(states.numStr === undefined || states.numStr === "", "Expecting empty number")
+    assert(states.tokenType === undefined || states.tokenType === null, "Expecting tokenType to be null")
     assert(states.isOptional === undefined || states.isOptional === false, "Expecting isOptional to be false")
-    assert(states.indexOrSliceState === undefined || states.indexOrSliceState === null, "Expecting indexOrSliceState to be null")
+    assert(states.index === undefined || states.index === null, "Expecting index to be null")
+    assert(states.slice === undefined || states.slice === null, "Expecting slice to be null")
+    assert(states.filter === undefined || states.filter === null, "Expecting filter to be null")
 }
 
 function defaultParseStates(): ParseState {
-    const name = ""
-    const numStr = ""
+    const tokenType = null
     const isOptional = false
-    const indexOrSliceState = null
-    return { name, numStr, isOptional, indexOrSliceState }
-}
-
-function parseNumStr(numStr: string): number {
-    assert(numStr.length > 0 && numStr !== "-", "invalid num str")
-    return parseInt(numStr)
+    const index = null
+    const slice = null
+    const filter = null
+    const sliceOrIndexState = null;
+    return { tokenType, isOptional, index, slice, filter, sliceOrIndexState }
 }
 
 function selectorFromParseState(
-    name: ParseState['name'],
+    parseTokenType: ParseState['tokenType'],
     isOptional: ParseState['isOptional'],
-    indexOrSliceState: ParseState['indexOrSliceState'],
+    index: ParseState['index'],
+    sliceState: ParseState['slice'],
+    filterState: ParseState['filter'],
+    sliceOrIndexState: ParseState['sliceOrIndexState'],
 ): Selector {
-    const isWildcard = name === "*"
+    if (parseTokenType === null) {
+        throw new Error("");
+    }
+    const tokenType: Selector['tokenType'] = parseTokenType.type === "choice" ?
+        { options: parseTokenType.options, type: "choice" } :
+        { ...parseTokenType };
+    assert(sliceOrIndexState === null)
     const selector: Selector = {
         type: "Selector",
-        name,
+        tokenType: tokenType,
         isOptional,
-        isWildcard,
-        index: null,
-        slice: null,
+        index: index,
+        filter: filterState,
+        slice: sliceState,
         parent: null,
         child: null
-    }
-    if (indexOrSliceState?.stage === "done") {
-        if ('index' in indexOrSliceState) {
-            selector.index = indexOrSliceState.index
-        }
-        else {
-            selector.slice = indexOrSliceState.slice
-        }
     }
     return selector
 }
@@ -84,120 +100,135 @@ function linkSelectors(parent: Selector, child: Selector) {
     child.parent = parent
 }
 
-function transitionIndexOrSliceState(
-    indexOrSliceState: ParseState['indexOrSliceState'],
-    numStr: ParseState['numStr'],
-    char: "[" | ":" | "]",
-    prevChar: string | null,
-): ParseState['indexOrSliceState'] {
-    const isEmptyNumStr = numStr.length === 0
-    if (indexOrSliceState === null || char === "[") { // check both for type narrowing
-        assert(char === "[" && indexOrSliceState === null, "indexOrSliceState must be null for [")
-        const hasFilterPrefix = prevChar === "$"
-        return { stage: "index", hasFilterPrefix }
-    }
-    if (indexOrSliceState.stage === "done") {
-        throw new Error("???")
-    }
-    if (indexOrSliceState.stage === "index") {
-        const isFilter = indexOrSliceState.hasFilterPrefix
-        if (char === "]") {
-            // treat empty index as full slice, e.g. dictionary.pair[] to select all pairs in a dictionary
-            assert(!isFilter, "Filter cannot be empty")
-            if (isEmptyNumStr) {
-                return { stage: "done", slice: { start: 0, stop: null, step: 1, isFilter: false } }
-            }
-            return { stage: "done", index: parseNumStr(numStr) }
-        }
-        const start = isEmptyNumStr ? 0 : parseNumStr(numStr)
-        return { stage: "stop", slice: { start, stop: null, step: 1, isFilter } }
-    }
-    const slice = indexOrSliceState.slice
-    if (indexOrSliceState.stage === "stop") { // second colon
-        const stop = isEmptyNumStr ? null : parseNumStr(numStr)
-        const stage: any = char === "]" ? "done" : "step"
-        return { stage, slice: { ...slice, stop } }
-    }
-    if (indexOrSliceState.stage === "step") { // ] for slices
-        assert(char === "]", "Already on slice step, too many : characters")
-        const step = isEmptyNumStr ? 1 : parseNumStr(numStr)
-        return { stage: "done", slice: { ...slice, step } }
-    }
-    throw new Error("???")
-}
 
 export function parseInput(input: string): Selector {
-    let { name, numStr, isOptional, indexOrSliceState } = defaultParseStates()
+    const tokens = new Lexer(input).tokenize();
+    for (const token of tokens) {
+        console.log(token.type);
+    }
+    let { tokenType, isOptional, index, slice, filter, sliceOrIndexState } = defaultParseStates()
 
-    let prevChar: string | null = null
     let root: Selector | null = null
     let curr: Selector | null = null
-    for (let char of input) {
-        if (char === " ") {
-            continue;
-        }
-        if (prevChar === "?") {
-            assert(char === ".", "? must precede . or end of string")
-        }
-        const isLetter = char.match(/[a-z]/i)
-        const isDigit = char >= '0' && char <= '9'
-        if (isLetter || char === "_") {
-            assertDefaultStates({ numStr, isOptional, indexOrSliceState });
-            assert(name !== "*", "Cannot append to wildcard *");
-            name += char;
-        }
-        else if (char === "*") {
-            assert(name === "", "Cannot mix * with name");
-            name = "*";
-        }
-        else if (char === "-" || isDigit) {
-            assert(indexOrSliceState !== null, "Can only have numbers in index or slice")
-            if (char === "-") {
-                assert(numStr.length === 0, "only minus at start of int")
+    for (let [i, token] of tokens.entries()) {
+        const nextToken: Token | undefined = tokens[i + 1];
+        switch (token.type) {
+            case "QUESTION_MARK": {
+                assert(nextToken?.type === "PERIOD", `? must precede . or end of string, not ${nextToken}`)
+                assert(isOptional === false, "Expecting isOptional to be false")
+                assert(sliceOrIndexState === null)
+                isOptional = true
             }
-            numStr += char
-        }
-        else if (char === "[") {
-            assert(name.length > 0, "Must have a name for index or slice")
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
-        }
-        else if (char === ":") {
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
-            numStr = ""
-        }
-        else if (char === "]") {
-            indexOrSliceState = transitionIndexOrSliceState(indexOrSliceState, numStr, char, prevChar)
-            numStr = ""
-        }
-        else if (char === "?") {
-            assert(isOptional === false, "Expecting isOptional to be false")
-            isOptional = true
-        }
-        else if (char === ".") {
-            const newSelector = selectorFromParseState(name, isOptional, indexOrSliceState);
-            if (curr !== null) {
-                linkSelectors(curr, newSelector)
+            case "ASTERISK": {
+                assert(sliceOrIndexState === null)
+                assert(tokenType === null);
+                tokenType = { type: "wildcard" }
+                break;
             }
-            if (root === null) {
-                root = newSelector
+            case "CLOSED_BRACKET": {
+                assertIsDefined(sliceOrIndexState)
+                if (sliceOrIndexState.stage === "index") {
+                    const num = sliceOrIndexState.num
+                    if (num === undefined) {
+                        assert(slice === null);
+                        slice = defaultSlice();
+                    }
+                    else {
+                        assert(index === null);
+                        index = num;
+                    }
+                    sliceOrIndexState = null;
+                }
+                break;
             }
-            curr = newSelector
-            const newDefault = defaultParseStates()
-            name = newDefault.name
-            numStr = newDefault.numStr
-            isOptional = newDefault.isOptional
-            indexOrSliceState = newDefault.indexOrSliceState
+            case "CLOSED_CURLY_BRACE": {
+                assertIsDefined(sliceOrIndexState);
+                if (sliceOrIndexState.stage === "stop" || sliceOrIndexState.stage === "step") {
+                    assert(sliceOrIndexState.isFilter)
+                    assertIsNullish(filter)
+                    filter = sliceOrIndexState.slice;
+                }
+                break;
+            }
+            case "COLON": {
+                assertIsDefined(sliceOrIndexState);
+                if (sliceOrIndexState.stage === "index") {
+                    sliceOrIndexState = { stage: "stop", slice: defaultSlice(), isFilter: false }
+                }
+                else if (sliceOrIndexState.stage === "start") {
+                    sliceOrIndexState = { ...sliceOrIndexState, stage: "stop" }
+                }
+                else {
+                    assert(sliceOrIndexState.stage === "stop")
+                    sliceOrIndexState = { ...sliceOrIndexState, stage: "step" }
+                }
+                break;
+            }
+            case "DOLLAR_SIGN": {
+                break;
+            }
+            case "NAME": {
+                if (tokenType === null) {
+                    tokenType = {type: "name", value: token.value}
+                }
+                else if (tokenType.type === "choice") {
+                    tokenType.options.push(token.value)
+                    tokenType.readyForOption = false;
+                }
+                break;
+            }
+            case "NUMBER": {
+                assertIsDefined(sliceOrIndexState)
+                if (sliceOrIndexState.stage === "index") {
+                    sliceOrIndexState.num = token.value;
+                }
+                else if (sliceOrIndexState.stage === "start") {
+                    sliceOrIndexState.slice.start = token.value
+                }
+                else if (sliceOrIndexState.stage === "stop") {
+                    sliceOrIndexState.slice.stop = token.value
+                }
+                else if (sliceOrIndexState.stage === "step") {
+                    sliceOrIndexState.slice.step = token.value
+                }
+                break;
+            }
+            case "OPEN_BRACKET": {
+                assert(tokenType !== null, "Must have a name for index or slice")
+                assert(index === null, "Index must be null")
+                sliceOrIndexState = { stage: "index" }
+                break;
+            }
+            case "OPEN_CURLY_BRACE": {
+                sliceOrIndexState = { isFilter: true, stage: "start", slice: defaultSlice() }
+                break;
+            }
+            case "PERIOD": {
+                const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter, sliceOrIndexState);
+                if (curr !== null) {
+                    linkSelectors(curr, newSelector)
+                }
+                if (root === null) {
+                    root = newSelector
+                }
+                curr = newSelector
+                const newDefault = defaultParseStates()
+                tokenType = newDefault.tokenType
+                isOptional = newDefault.isOptional
+                index = newDefault.index
+                slice = newDefault.slice
+                filter = newDefault.filter
+                sliceOrIndexState = newDefault.sliceOrIndexState
+                break;
+            }
+            default: {
+                const exhaustiveCheck: never = token;
+                throw new Error(`Unexpected token ${exhaustiveCheck}`)
+            }
         }
-        else if (char === "$") {
-
-        }
-        else {
-            throw new Error(`Unexpected character ${char}`)
-        }
-        prevChar = char
     }
-    if (name.length > 0) {
-        const newSelector = selectorFromParseState(name, isOptional, indexOrSliceState);
+    if (tokenType !== null) {
+        const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter, sliceOrIndexState);
         if (curr !== null) {
             linkSelectors(curr, newSelector)
         }
@@ -214,11 +245,11 @@ export function parseInput(input: string): Selector {
         const newRoot: Selector = {
             type: "Selector",
             isOptional: false,
-            isWildcard: true,
-            name: "*",
+            tokenType: { type: "wildcard" },
             child: root,
             parent: null,
             index: null,
+            filter: null,
             slice: null,
         }
         root = newRoot
@@ -227,7 +258,7 @@ export function parseInput(input: string): Selector {
 }
 
 export function isMultiple(selector: Selector) {
-    return (selector.slice !== null && !selector.slice.isFilter) || selector.index !== null
+    return selector.slice !== null  || selector.index !== null
 }
 
 export function getLeafSelector(selector: Selector): Selector {
@@ -235,4 +266,8 @@ export function getLeafSelector(selector: Selector): Selector {
         return selector;
     }
     return getLeafSelector(selector.child);
+}
+
+function defaultSlice(): Slice {
+    return { start: 0, stop: null, step: 1 }
 }

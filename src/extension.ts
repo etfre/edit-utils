@@ -4,7 +4,8 @@ import { setup } from "./ast"
 
 export async function activate(context: vscode.ExtensionContext) {
     await setup()
-    watchRPCInputFile()
+    watchRPCInputFile();
+    setInterval(watchRPCInputFile, 10000)
 }
 
 export async function deactivate() {
