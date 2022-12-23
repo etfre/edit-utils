@@ -56,6 +56,7 @@ type SelectNodeRequest = RequestBase & {
         pattern: string,
         patterns: string[],
         direction: "up" | "before" | "after"
+        selectAction: "all" | "each"
         count?: number
     }
 }

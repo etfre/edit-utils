@@ -74,9 +74,14 @@ export class Lexer {
         else if (char === "*") {
             return { type: "ASTERISK" }
         }
-        // else if (char === "$") {
-        //     return { type: "DOLLAR_SIGN" }
-        // }
+        else if (char === "$") {
+            this.advance();
+            const ruleName = this.readWhile(x => this.isNameChar(x))
+            if (ruleName.length === 0) {
+                throw new Error("Got $ but no rule name");
+            }
+            return { type: "RULE_REF", ruleName }
+        }
         else if (char === "?") {
             return { type: "QUESTION_MARK" }
         }
