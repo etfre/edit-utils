@@ -105,7 +105,8 @@ export function parseInput(input: string): Selector {
                 assert(nextToken?.type === "PERIOD", `? must precede . or end of string, not ${nextToken}`)
                 assert(isOptional === false, "Expecting isOptional to be false")
                 assert(sliceOrIndexState === null)
-                isOptional = true
+                isOptional = true;
+                break;
             }
             case "ASTERISK": {
                 assert(sliceOrIndexState === null)
@@ -155,7 +156,7 @@ export function parseInput(input: string): Selector {
                 assertIsDefined(sliceOrIndexState);
                 if (sliceOrIndexState.stage === "index") {
                     const start = sliceOrIndexState.num ?? 0;
-                    const slice = {...defaultSlice(), start}
+                    const slice = { ...defaultSlice(), start }
                     sliceOrIndexState = { stage: "stop", slice, isFilter: false }
                 }
                 else if (sliceOrIndexState.stage === "start") {
@@ -175,6 +176,9 @@ export function parseInput(input: string): Selector {
                     assert(tokenType.readyForOption)
                     tokenType.options.push({ type: "name", value: token.value })
                     tokenType.readyForOption = false;
+                }
+                else {
+                    throw new Error("Name requires null or choice tokenType")
                 }
                 break;
             }

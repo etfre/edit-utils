@@ -402,18 +402,14 @@ class PathNode {
     *iterDown(): Generator<PathNode> {
         yield this
         if (this.child !== null) {
-            for (const desc of this.child.node.iterDown()) {
-                yield desc
-            }
+            yield* this.child.node.iterDown()
         }
     }
 
     *iterUp(): Generator<PathNode> {
         yield this
         if (this.parent !== null) {
-            for (const ancesctor of this.parent.node.iterUp()) {
-                yield ancesctor
-            }
+            yield* this.parent.node.iterUp()
         }
     }
 
