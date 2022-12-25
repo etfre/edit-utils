@@ -35,74 +35,38 @@ export function* pathsChildrenFirst(
     yield new PathNode(node);
 }
 
-export function searchFromPosition(
-    position: vscode.Position,
-    root: TreeNode,
-    direction: "up" | "before" | "after",
-    selectors: dsl.Selector[],
-    count = 1,
-): TreeNode[] {
-    const path = findNodePathToPosition(position, root)
-    if (path === null) {
-        return []
-    }
-    const leaf = path.getLeaf();
-    if (direction === "up") {
-        for (let pathNode of leaf.iterUp()) {
-            const match = matchNodeEntryBottomUp(pathNode, selectors)
-            if (match !== null) {
-                return [match];
-            }
-            const { matches, selector } = matchNodeEntry(pathNode.node, selectors)
-            if (matches.length > 0) {
-                const formattedMatches = matches.map(match => {
-                    const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
-                    return addedOptionals.length === 0 ? match : addedOptionals[0]
-                })
-                return formattedMatches
-            }
+
+export function* search(pathNodeGenerator: Generator<PathNode>, selectors: dsl.Selector[]): Generator<TreeNode[]> {
+    for (let pathNode of pathNodeGenerator) {
+        const matches = findMatches(pathNode, selectors);
+        if (matches.length > 0) {
+            yield matches;
         }
     }
-    else { // before or after
-        return matchDirection(direction, selectors, leaf)
-    }
-    return [];
 }
 
-function matchDirection(
-    direction: "before" | "after",
-    selectors: dsl.Selector[],
-    pathLeaf: PathNode,
-    matchTarget: number = 1
-): TreeNode[] {
-    let gotMatchContainingLeaf = false;
-    for (const { node, isAncestor } of iterDirection(direction, pathLeaf)) {
-        const match = matchNodeEntryBottomUp(node, selectors);
-        if (match === null) {
-            continue;
-        }
-        /* Skip the first match if it contains our starting point, for example:
-
-        def foo():
-            def bar():
-                pass
-
-        If the cursor is in pass and the command is "select previous function definition" then
-        we should skip bar and go to foo because bar is the current function definition and
-        foo if the previous one. */
-        if (isAncestor && !gotMatchContainingLeaf) {
-            gotMatchContainingLeaf = true;
-            continue;
-        }
+export function findMatches(pathNode: PathNode, selectors: dsl.Selector[]): TreeNode[] {
+    const match = matchNodeEntryBottomUp(pathNode, selectors)
+    if (match !== null) {
         return [match];
     }
+    else {
+        const { matches, selector } = matchNodeEntry(pathNode.node, selectors)
+        if (matches.length > 0) {
+            const formattedMatches = matches.map(match => {
+                const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
+                return addedOptionals.length === 0 ? match : addedOptionals[0]
+            })
+            return formattedMatches
+        }
+    }
     return [];
 }
 
-function* iterDirection(
+export function* iterDirection(
     direction: "before" | "after",
     pathLeaf: PathNode
-): Generator<{ node: PathNode, isAncestor: boolean }> {
+): Generator<PathNode> {
     const isReverse = direction === "before";
     for (const pathNode of pathLeaf.iterUp()) {
         if (pathNode.parent === null) break;
@@ -117,10 +81,10 @@ function* iterDirection(
             for (const siblingPath of pathsChildrenFirst(sibling, isReverse)) {
                 const parentCopy = parent.copyFromRoot()
                 parentCopy.setChild(siblingPath, siblingIdx)
-                yield { node: siblingPath.getLeaf(), isAncestor: false }
+                yield siblingPath.getLeaf()
             }
         }
-        yield { node: parent, isAncestor: true }
+        yield parent;
     }
 }
 
@@ -130,7 +94,7 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
 }
 
 // TODO: this can be a recursive binary search for O(depth*logn) instead of O(n) performance
-function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
+export function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
     for (const path of pathsChildrenFirst(root)) {
         const leafNode = path.getLeaf().node
         if (doesNodeContainPosition(leafNode, position)) {
@@ -309,7 +273,7 @@ function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): Tre
     return matches
 }
 
-function vscodePositionFromNodePosition(nodePosition: { row: number, column: number }) {
+export function vscodePositionFromNodePosition(nodePosition: { row: number, column: number }) {
     return new vscode.Position(nodePosition.row, nodePosition.column)
 }
 
@@ -357,7 +321,7 @@ export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
     return new vscode.Selection(anchor, active)
 }
 
-class PathNode {
+export class PathNode {
 
     parent: { indexOfChild: number, node: PathNode } | null
     node: TreeNode

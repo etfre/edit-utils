@@ -56,7 +56,7 @@ type SelectNodeRequest = RequestBase & {
         pattern: string,
         patterns: string[],
         direction: "up" | "before" | "after"
-        selectAction: "all" | "each"
+        selectType: "block" | "each"
         count?: number
     }
 }
@@ -149,17 +149,17 @@ type PipeToken = {
     type: "PIPE"
 }
 
-type Token = 
-    | NameToken 
+type Token =
+    | NameToken
     | NumberToken
-    | OpenCurlyBraceToken 
-    | ClosedCurlyBraceToken 
-    | OpenBracketToken 
-    | ClosedBracketToken 
-    | OpenParenToken 
-    | ClosedParenToken 
-    | ColonToken 
-    | PeriodToken 
+    | OpenCurlyBraceToken
+    | ClosedCurlyBraceToken
+    | OpenBracketToken
+    | ClosedBracketToken
+    | OpenParenToken
+    | ClosedParenToken
+    | ColonToken
+    | PeriodToken
     | RuleRefToken
     | AsteriskToken
     | QuestionMarkToken

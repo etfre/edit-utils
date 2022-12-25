@@ -47,12 +47,55 @@ export async function handleSelectInSurround(editor: vscode.TextEditor, params: 
 export async function handleSelectNode(editor: vscode.TextEditor, params: SelectNodeRequest['params']) {
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
-    ast.dump(root)
-    const selectors = params.patterns.map(dsl.parseInput)
-    const cursorPosition = editor.selection.active;
-    const selectedNodes = ast.searchFromPosition(cursorPosition, root, params.direction, selectors)
-    if (selectedNodes.length > 0) {
-        const selection = ast.selectionFromNodeArray(selectedNodes, false);
-        editor.selections = [selection];
+    const selectors = params.patterns.map(dsl.parseInput);
+    const direction = params.direction;
+    let newSelections: vscode.Selection[] = [];
+    for (const selection of editor.selections) {
+        const cursorPosition = selection.active;
+        const path = ast.findNodePathToPosition(cursorPosition, root)
+        if (path === null) {
+            continue;
+        }
+        const leaf = path.getLeaf();
+        let pathNodeGeneratorFn: Generator<ast.PathNode>;
+        if (direction === "up") {
+            pathNodeGeneratorFn = leaf.iterUp();
+        }
+        else if (direction === "before" || direction === "after") {
+            pathNodeGeneratorFn = ast.iterDirection(direction, leaf);
+        }
+        else {
+            throw new Error("")
+        }
+        for (const matches of ast.search(pathNodeGeneratorFn, selectors)) {
+            const filteredMatches = matches.filter(x => filterMatch(x, selection, direction));
+            if (filteredMatches.length > 0) {
+                if (params.selectType === "block") {
+                    const mergedSelection = ast.selectionFromNodeArray(filteredMatches, false);
+                    newSelections.push(mergedSelection)
+                }
+                else if (params.selectType === "each") {
+                    const mergedSelections = filteredMatches.map(x => ast.selectionFromNodeArray([x], false));
+                    newSelections = newSelections.concat(mergedSelections)
+                }
+                else {
+                    throw new Error(`Unhandled selectAction ${params.selectType}`)
+                }
+                break;
+            }
+        }
     }
+    if (newSelections.length > 0) {
+        editor.selections = newSelections;
+    }
+}
+
+function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "before" | "after" | "up"): boolean {
+    if (direction === "before") {
+        return ast.vscodePositionFromNodePosition(testNode.endPosition).isBefore(selection.anchor);
+    }
+    else if (direction === "after") {
+        return ast.vscodePositionFromNodePosition(testNode.startPosition).isAfter(selection.active);
+    }
+    return true;
 }
