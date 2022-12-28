@@ -2,6 +2,8 @@ import * as vscode from 'vscode';
 import { findAndSelection } from "./core"
 import * as ast from "./ast"
 import * as dsl from "./parser"
+import { mergeGenerators } from './util';
+import { performance } from 'perf_hooks';
 
 
 export async function handlePing() {
@@ -63,14 +65,17 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
     let newSelections: vscode.Selection[] = [];
     for (const selection of editor.selections) {
         const cursorPosition = selection.active;
+        const s = performance.now();
         const path = ast.findNodePathToPosition(cursorPosition, root)
+        const e = performance.now();
+        console.log(e-s)
         if (path === null) {
             continue;
         }
         const leaf = path.getLeaf();
         let pathNodeGeneratorFn: Generator<ast.PathNode>;
         if (direction === "up") {
-            pathNodeGeneratorFn = leaf.iterUp();
+            pathNodeGeneratorFn = mergeGenerators(leaf.iterUp(), ast.iterClosest(cursorPosition, leaf));
         }
         else if (direction === "before") {
             pathNodeGeneratorFn = ast.iterDirection("before", leaf, true);

@@ -91,28 +91,27 @@ export function* iterDirection(
     }
 }
 
-function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generator<PathNode> {
-    const beforeIter = iterDirection("after", pathLeaf, false);
+export function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generator<PathNode> {
+    const beforeIter = iterDirection("before", pathLeaf, false);
     const afterIter = iterDirection("after", pathLeaf, false);
     let beforeCurr = beforeIter.next();
     let afterCurr = afterIter.next();
-    if (!beforeCurr.done && !afterCurr.done) {
-        let beforeTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
-        let afterTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
-        while (!beforeCurr.done && !afterCurr.done) {
+    let beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+    let afterTest = afterCurr.done ? null : vscodePositionFromNodePosition(afterCurr.value.node.startPosition);
+        while (beforeTest !== null && afterTest !== null) {
             const compareResult = getClosest(from, beforeTest, afterTest) 
             if (compareResult < 1) {
                 yield beforeCurr.value;
                 beforeCurr = beforeIter.next()
-                beforeTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+                beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
             }
             else {
                 yield afterCurr.value;
-                afterCurr = afterIter.next()
-                afterTest = vscodePositionFromNodePosition(afterCurr.value.node.endPosition);
+                afterCurr = afterIter.next();
+                afterTest = afterCurr.done ? null : vscodePositionFromNodePosition(afterCurr.value.node.endPosition);
             }
-        }
     }
+    // one generator is exhausted by now so order doesn't matter anymore
     for (const beforeNode of beforeIter) {
         yield beforeNode;
     }
