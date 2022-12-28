@@ -49,6 +49,21 @@ type SelectInSurroundRequest = RequestBase & {
     }
 }
 
+type ExecuteCommandRequest = RequestBase & {
+    method: "EXECUTE_COMMAND"
+    params: {
+        command: string,
+        args?: any[]
+    }
+}
+
+type GoToLineRequest = RequestBase & {
+    method: "GO_TO_LINE"
+    params: {
+        line: number,
+    }
+}
+
 type SelectNodeRequest = RequestBase & {
     method: "SELECT_NODE",
     params: {
@@ -66,7 +81,14 @@ type GetActiveDocumentRequest = RequestBase & {
 }
 
 
-type ClientRequest = PingRequest | SelectUntilPatternRequest | SelectInSurroundRequest | GetActiveDocumentRequest | SelectNodeRequest
+type ClientRequest = 
+    | PingRequest 
+    | SelectUntilPatternRequest 
+    | SelectInSurroundRequest 
+    | GetActiveDocumentRequest 
+    | SelectNodeRequest 
+    | ExecuteCommandRequest
+    | GoToLineRequest
 
 type ClientResponseResult = JSONValue
 
@@ -149,6 +171,10 @@ type PipeToken = {
     type: "PIPE"
 }
 
+type NotToken = {
+    type: "NOT"
+}
+
 type Token =
     | NameToken
     | NumberToken
@@ -164,3 +190,4 @@ type Token =
     | AsteriskToken
     | QuestionMarkToken
     | PipeToken
+    | NotToken

@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import * as dsl from "./dsl"
+import * as dsl from "./parser"
 import { assert, range, reversed, sliceArray, sliceIndices } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
@@ -65,10 +65,14 @@ export function findMatches(pathNode: PathNode, selectors: dsl.Selector[]): Tree
 
 export function* iterDirection(
     direction: "before" | "after",
-    pathLeaf: PathNode
+    pathLeaf: PathNode,
+    yieldDirect = false
 ): Generator<PathNode> {
     const isReverse = direction === "before";
     for (const pathNode of pathLeaf.iterUp()) {
+        if (yieldDirect) {
+            yield pathNode;
+        }
         if (pathNode.parent === null) break;
         const indexOfChild = pathNode.parent.indexOfChild
         const parent = pathNode.parent.node;
@@ -84,8 +88,57 @@ export function* iterDirection(
                 yield siblingPath.getLeaf()
             }
         }
-        yield parent;
     }
+}
+
+function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generator<PathNode> {
+    const beforeIter = iterDirection("after", pathLeaf, false);
+    const afterIter = iterDirection("after", pathLeaf, false);
+    let beforeCurr = beforeIter.next();
+    let afterCurr = afterIter.next();
+    if (!beforeCurr.done && !afterCurr.done) {
+        let beforeTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+        let afterTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+        while (!beforeCurr.done && !afterCurr.done) {
+            const compareResult = getClosest(from, beforeTest, afterTest) 
+            if (compareResult < 1) {
+                yield beforeCurr.value;
+                beforeCurr = beforeIter.next()
+                beforeTest = vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+            }
+            else {
+                yield afterCurr.value;
+                afterCurr = afterIter.next()
+                afterTest = vscodePositionFromNodePosition(afterCurr.value.node.endPosition);
+            }
+        }
+    }
+    for (const beforeNode of beforeIter) {
+        yield beforeNode;
+    }
+    for (const afterNode of afterIter) {
+        yield afterNode;
+    }
+}
+
+function getClosest(from: vscode.Position, a: vscode.Position, b: vscode.Position): number {
+    const aLineDiff = Math.abs(from.line - a.line);
+    const bLineDiff = Math.abs(from.line - b.line);
+    if (aLineDiff < bLineDiff) {
+        return -1;  
+    }
+    if (aLineDiff > bLineDiff) {
+        return 1;
+    }
+    const aCharDiff = Math.abs(from.character - a.character);
+    const bCharDiff = Math.abs(from.character - b.character);
+    if (aCharDiff < bCharDiff) {
+        return -1;
+    }
+    if (aCharDiff > bCharDiff) {
+        return 1;
+    }
+    return 0;
 }
 
 function nodesOverlap(a: TreeNode, b: TreeNode) {

@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { findAndSelection } from "./core"
 import * as ast from "./ast"
-import * as dsl from "./dsl"
+import * as dsl from "./parser"
 
 
 export async function handlePing() {
@@ -44,6 +44,17 @@ export async function handleSelectInSurround(editor: vscode.TextEditor, params: 
     }
 }
 
+export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLineRequest['params']) {
+    const line = params.line;
+    editor.selection = new vscode.Selection(line, 0, line, 0);
+    await vscode.commands.executeCommand("cursorHome")
+}
+
+export async function handleExecuteCommand(editor: vscode.TextEditor, params: ExecuteCommandRequest['params']) {
+    const args = params.args ?? [];
+    await vscode.commands.executeCommand(params.command, ...args)
+}
+
 export async function handleSelectNode(editor: vscode.TextEditor, params: SelectNodeRequest['params']) {
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
@@ -61,8 +72,11 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
         if (direction === "up") {
             pathNodeGeneratorFn = leaf.iterUp();
         }
-        else if (direction === "before" || direction === "after") {
-            pathNodeGeneratorFn = ast.iterDirection(direction, leaf);
+        else if (direction === "before") {
+            pathNodeGeneratorFn = ast.iterDirection("before", leaf, true);
+        }
+        else if (direction === "after") {
+            pathNodeGeneratorFn = ast.iterDirection("after", leaf);
         }
         else {
             throw new Error("")
@@ -92,7 +106,7 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
 
 function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "before" | "after" | "up"): boolean {
     if (direction === "before") {
-        return ast.vscodePositionFromNodePosition(testNode.endPosition).isBefore(selection.anchor);
+        return ast.vscodePositionFromNodePosition(testNode.startPosition).isBefore(selection.anchor);
     }
     else if (direction === "after") {
         return ast.vscodePositionFromNodePosition(testNode.startPosition).isAfter(selection.active);

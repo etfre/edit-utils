@@ -243,6 +243,9 @@ export function parseInput(input: string): Selector {
             case "PIPE": {
                 break;
             }
+            case "NOT": {
+                break;
+            }
             default: {
                 const exhaustiveCheck: never = token;
                 throw new Error(`Unexpected token ${exhaustiveCheck}`)

@@ -73,3 +73,9 @@ export function assertIsNullish(val: any): asserts val is null | undefined {
         );
     }
 }
+
+export function* mergeGenerators<T>(...generators: Generator<T>[]) {
+    for (const gen of generators) {
+        yield* gen
+    }
+}

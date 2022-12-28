@@ -53,6 +53,34 @@ export class Lexer {
             assert(!isNaN(num))
             return { type: "NUMBER", value: num }
         }
+        else if (char === "!") {
+            return { type: "NOT" }
+        }
+        else if (char === "\"") {
+            this.advance();
+            let strContents = "";
+            let isEscape = false;
+            for (const char of this.read()) {
+                if (isEscape) {
+                    strContents += char;
+                    isEscape = false;
+                    continue;
+                }
+                if (char === "\"") {
+                    break;
+                }
+                if (char === "\\") {
+                    isEscape = true;
+                    continue;
+                }
+                strContents += char;
+            }
+            this.advance()
+            if (strContents.length === 0) {
+                throw new Error("Empty string");
+            }
+            return { type: "NAME", value: strContents }
+        }
         else if (char === "{") {
             return { type: "OPEN_CURLY_BRACE" }
         }

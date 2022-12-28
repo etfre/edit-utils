@@ -19,6 +19,8 @@ type clientMessageHandlersType = {
     [type in ClientRequest['method']]: handlerType
 }
 const clientMessageHandlers: clientMessageHandlersType = {
+    "GO_TO_LINE": handlers.handleGoToLine,
+    "EXECUTE_COMMAND": handlers.handleExecuteCommand,
     "PING": handlers.handlePing,
     "SELECT_UNTIL_PATTERN": handlers.handleSelectUntilPattern,
     "SELECT_IN_SURROUND": handlers.handleSelectInSurround,
