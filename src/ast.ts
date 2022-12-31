@@ -69,7 +69,7 @@ export function* iterDirection(
     yieldDirect = false
 ): Generator<PathNode> {
     const isReverse = direction === "before";
-    for (const pathNode of pathLeaf.iterUp()) {
+    for (const [i, pathNode] of Array.from(pathLeaf.iterUp()).entries()) {
         if (yieldDirect) {
             yield pathNode;
         }
@@ -98,18 +98,18 @@ export function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generat
     let afterCurr = afterIter.next();
     let beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
     let afterTest = afterCurr.done ? null : vscodePositionFromNodePosition(afterCurr.value.node.startPosition);
-        while (beforeTest !== null && afterTest !== null) {
-            const compareResult = getClosest(from, beforeTest, afterTest) 
-            if (compareResult < 1) {
-                yield beforeCurr.value;
-                beforeCurr = beforeIter.next()
-                beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
-            }
-            else {
-                yield afterCurr.value;
-                afterCurr = afterIter.next();
-                afterTest = afterCurr.done ? null : vscodePositionFromNodePosition(afterCurr.value.node.endPosition);
-            }
+    while (beforeTest !== null && afterTest !== null) {
+        const compareResult = getClosest(from, beforeTest, afterTest)
+        if (compareResult < 1) {
+            yield beforeCurr.value;
+            beforeCurr = beforeIter.next()
+            beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
+        }
+        else {
+            yield afterCurr.value;
+            afterCurr = afterIter.next();
+            afterTest = afterCurr.done ? null : vscodePositionFromNodePosition(afterCurr.value.node.endPosition);
+        }
     }
     // one generator is exhausted by now so order doesn't matter anymore
     for (const beforeNode of beforeIter) {
@@ -123,21 +123,13 @@ export function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generat
 function getClosest(from: vscode.Position, a: vscode.Position, b: vscode.Position): number {
     const aLineDiff = Math.abs(from.line - a.line);
     const bLineDiff = Math.abs(from.line - b.line);
-    if (aLineDiff < bLineDiff) {
-        return -1;  
-    }
-    if (aLineDiff > bLineDiff) {
-        return 1;
+    const lineDiff = bLineDiff - aLineDiff;
+    if (lineDiff !== 0) {
+        return lineDiff;
     }
     const aCharDiff = Math.abs(from.character - a.character);
     const bCharDiff = Math.abs(from.character - b.character);
-    if (aCharDiff < bCharDiff) {
-        return -1;
-    }
-    if (aCharDiff > bCharDiff) {
-        return 1;
-    }
-    return 0;
+    return bCharDiff - aCharDiff
 }
 
 function nodesOverlap(a: TreeNode, b: TreeNode) {
@@ -145,15 +137,88 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
         a.endIndex > b.startIndex && a.endIndex < b.endIndex
 }
 
-// TODO: this can be a recursive binary search for O(depth*logn) instead of O(n) performance
-export function findNodePathToPosition(position: vscode.Position, root: TreeNode) {
-    for (const path of pathsChildrenFirst(root)) {
-        const leafNode = path.getLeaf().node
-        if (doesNodeContainPosition(leafNode, position)) {
-            return path;
+
+export function findNodePathToPosition(position: vscode.Position, node: TreeNode): PathNode | null {
+    if (!doesNodeContainPosition(node, position)) {
+        return null;
+    }
+    const path = new PathNode(node);
+    if (node.childCount > 0) {
+        const childIdx = findClosestChildIndex(position, node.children, 0, node.childCount - 1);
+        const childNode = node.children[childIdx];
+        const isPositionInChild = doesNodeContainPosition(childNode, position);
+        if (isPositionInChild) {
+            const childResult = findNodePathToPosition(position, childNode)
+            if (childResult !== null) {
+                path.setChild(childResult, childIdx);
+            }
+        }
+        // this indicates we have a non-leaf node but none of the children contain the position
+        else {
+            path.setChild(new PathNode(childNode), childIdx);
         }
     }
-    return null;
+    return path;
+}
+
+function findClosestChildIndex(position: vscode.Position, children: TreeNode[], low: number, high: number): number {
+    if (low > high) {
+        throw new Error("");
+    }
+    if (children.length === 1) {
+        return 0;
+    }
+    const mid = Math.floor((high + low) / 2);
+    const child = children[mid]
+    const cmp = compareNodeWithPosition(child, position);
+    if (cmp === 0) {
+        return mid;
+    }
+    else {
+        // if position is less than the first or greater than the last child, just return that child
+        if (cmp === -1 && mid === 0 || cmp === 1 && mid === children.length - 1) {
+            return mid;
+        }
+        const diff = high - low;
+        if (diff === 0) {
+            let midPos: vscode.Position
+            let adjacentIdx: number;
+            let adjacantPos: vscode.Position
+            if (cmp === -1) {
+                midPos = vscodePositionFromNodePosition(children[mid].startPosition)
+                adjacentIdx = mid - 1;
+                adjacantPos = vscodePositionFromNodePosition(children[adjacentIdx].endPosition)
+            }
+            else {
+                midPos = vscodePositionFromNodePosition(children[mid].endPosition)
+                adjacentIdx = mid + 1;
+                adjacantPos = vscodePositionFromNodePosition(children[adjacentIdx].startPosition)
+            }
+            return getClosest(position, midPos, adjacantPos) >= 0 ? mid : adjacentIdx
+        }
+        if (cmp === -1) {
+            return findClosestChildIndex(position, children, low, mid - 1);
+        }
+        if (cmp === 1) {
+            return findClosestChildIndex(position, children, mid + 1, high);
+        }
+    }
+    throw new Error("")
+}
+
+function findClosestPosition(from: vscode.Position, testPositions: vscode.Position[]): number {
+    if (testPositions.length === 0) {
+        throw new Error("")
+    }
+    let closestIdx = 0;
+    let closestPosition = testPositions[0];
+    for (const [i, pos] of testPositions.slice(1).entries()) {
+        if (getClosest(from, closestPosition, pos) > 0) {
+            closestIdx = i;
+            closestPosition = pos;
+        }
+    }
+    return closestIdx;
 }
 
 function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
@@ -329,10 +394,20 @@ export function vscodePositionFromNodePosition(nodePosition: { row: number, colu
     return new vscode.Position(nodePosition.row, nodePosition.column)
 }
 
-function doesNodeContainPosition(node: TreeNode, position: vscode.Position) {
+function compareNodeWithPosition(node: TreeNode, testPosition: vscode.Position): -1 | 0 | 1 {
     const nodeStartPosition = vscodePositionFromNodePosition(node.startPosition)
     const nodeEndPosition = vscodePositionFromNodePosition(node.endPosition)
-    return position.isAfterOrEqual(nodeStartPosition) && position.isBeforeOrEqual(nodeEndPosition)
+    if (testPosition.isBeforeOrEqual(nodeStartPosition)) {
+        return -1
+    }
+    else if (testPosition.isAfter(nodeEndPosition)) {
+        return 1
+    }
+    return 0;
+}
+
+function doesNodeContainPosition(node: TreeNode, testPosition: vscode.Position): boolean {
+    return compareNodeWithPosition(node, testPosition) === 0;
 }
 
 export function selectionFromTreeNode(node: TreeNode, reverse = false): vscode.Selection {
@@ -377,7 +452,7 @@ export class PathNode {
 
     parent: { indexOfChild: number, node: PathNode } | null
     node: TreeNode
-    child: { indexInChildren: number, node: PathNode } | null
+    child: { indexInChildren: number, node: PathNode | null } | null
 
     constructor(node: TreeNode) {
         this.parent = null
@@ -398,7 +473,10 @@ export class PathNode {
     }
 
     getLeaf(): PathNode {
-        return this.child === null ? this : this.child.node.getLeaf()
+        if (this.child === null || this.child.node === null) {
+            return this;
+        }
+        return this.child.node.getLeaf()
     }
 
     setChild(child: PathNode, index: number) {
@@ -417,7 +495,7 @@ export class PathNode {
 
     *iterDown(): Generator<PathNode> {
         yield this
-        if (this.child !== null) {
+        if (this.child !== null && this.child.node !== null) {
             yield* this.child.node.iterDown()
         }
     }
