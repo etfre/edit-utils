@@ -60,15 +60,13 @@ export async function handleExecuteCommand(editor: vscode.TextEditor, params: Ex
 export async function handleSelectNode(editor: vscode.TextEditor, params: SelectNodeRequest['params']) {
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
+    ast.dump(root);
     const selectors = params.patterns.map(dsl.parseInput);
     const direction = params.direction;
     let newSelections: vscode.Selection[] = [];
     for (const selection of editor.selections) {
         const cursorPosition = selection.active;
-        const s = performance.now();
         const path = ast.findNodePathToPosition(cursorPosition, root)
-        const e = performance.now();
-        console.log(e-s)
         if (path === null) {
             continue;
         }

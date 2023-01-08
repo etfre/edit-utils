@@ -1,4 +1,5 @@
 import * as vscode from "vscode"
+import { yieldSubtypes } from "./nodeLoader";
 import * as dsl from "./parser"
 import { assert, range, reversed, sliceArray, sliceIndices } from "./util";
 
@@ -269,7 +270,12 @@ function testNode(node: TreeNode, selector: dsl.Selector) {
 
 function testTokenNameOrRuleRef(node: TreeNode, tokenType: dsl.Name | dsl.RuleRef) {
     if (tokenType.type === "name") {
-        return tokenType.value === node.type;
+        for (const nodeType of yieldSubtypes(tokenType.value, "python")) {
+            if (nodeType === node.type) {
+                return true;
+            }
+        }
+        return false;
     }
     throw new Error("unimplemented ruleref")
 }
