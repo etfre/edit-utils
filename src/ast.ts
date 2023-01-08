@@ -69,7 +69,19 @@ export function* iterDirection(
     yieldDirect = false
 ): Generator<PathNode> {
     const isReverse = direction === "before";
-    for (const [i, pathNode] of Array.from(pathLeaf.iterUp()).entries()) {
+    if (direction === "after") {
+        const parent = pathLeaf.parent;
+        const childNodes = Array.from(pathsChildrenFirst(pathLeaf.node, isReverse));
+        childNodes.pop();
+        for (const childPath of childNodes) {
+            if (parent) {
+                const parentCopy = parent.node.copyFromRoot();
+                parentCopy.setChild(childPath, parent.indexOfChild);
+            }
+            yield childPath.getLeaf()
+        }
+    }
+    for (const pathNode of pathLeaf.iterUp()) {
         if (yieldDirect) {
             yield pathNode;
         }
@@ -123,13 +135,13 @@ export function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generat
 function getClosest(from: vscode.Position, a: vscode.Position, b: vscode.Position): number {
     const aLineDiff = Math.abs(from.line - a.line);
     const bLineDiff = Math.abs(from.line - b.line);
-    const lineDiff = bLineDiff - aLineDiff;
+    const lineDiff = aLineDiff - bLineDiff;
     if (lineDiff !== 0) {
         return lineDiff;
     }
     const aCharDiff = Math.abs(from.character - a.character);
     const bCharDiff = Math.abs(from.character - b.character);
-    return bCharDiff - aCharDiff
+    return aCharDiff - bCharDiff
 }
 
 function nodesOverlap(a: TreeNode, b: TreeNode) {
@@ -176,7 +188,7 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
     }
     else {
         // if position is less than the first or greater than the last child, just return that child
-        if (cmp === -1 && mid === 0 || cmp === 1 && mid === children.length - 1) {
+        if (cmp === -1 && mid === low || cmp === 1 && mid === high) {
             return mid;
         }
         const diff = high - low;
