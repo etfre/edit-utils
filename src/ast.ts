@@ -269,8 +269,9 @@ function testNode(node: TreeNode, selector: dsl.Selector) {
 }
 
 function testTokenNameOrRuleRef(node: TreeNode, tokenType: dsl.Name | dsl.RuleRef) {
+    const editor = vscode.window.activeTextEditor as vscode.TextEditor
     if (tokenType.type === "name") {
-        for (const nodeType of yieldSubtypes(tokenType.value, "python")) {
+        for (const nodeType of yieldSubtypes(tokenType.value, editor.document.languageId)) {
             if (nodeType === node.type) {
                 return true;
             }

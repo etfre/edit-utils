@@ -93,6 +93,15 @@ export class Lexer {
         else if (char === "]") {
             return { type: "CLOSED_BRACKET" }
         }
+        else if (char === "(") {
+            return { type: "OPEN_PAREN" }
+        }
+        else if (char === ")") {
+            return { type: "CLOSED_PAREN" }
+        }
+        else if (char === "|") {
+            return { type: "PIPE" }
+        }
         else if (char === ":") {
             return { type: "COLON" }
         }

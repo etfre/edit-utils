@@ -144,12 +144,8 @@ export function parseInput(input: string): Selector {
                 break;
             }
             case "CLOSED_PAREN": {
-                assertIsDefined(sliceOrIndexState);
-                if (sliceOrIndexState.stage === "stop" || sliceOrIndexState.stage === "step") {
-                    assert(sliceOrIndexState.isFilter)
-                    assertIsNullish(filter)
-                    filter = sliceOrIndexState.slice;
-                }
+                assert(tokenType?.type === "choice" && !tokenType.isDone)
+                tokenType.isDone = true;
                 break;
             }
             case "COLON": {
@@ -220,6 +216,8 @@ export function parseInput(input: string): Selector {
                 break;
             }
             case "OPEN_PAREN": {
+                assert(tokenType === null)
+                tokenType = {type: "choice", readyForOption: true, options: [], isDone: false}
                 break;
             }
             case "PERIOD": {
@@ -241,6 +239,8 @@ export function parseInput(input: string): Selector {
                 break;
             }
             case "PIPE": {
+                assert(tokenType?.type === "choice" && !tokenType.isDone)
+                tokenType.readyForOption = true;
                 break;
             }
             case "NOT": {
