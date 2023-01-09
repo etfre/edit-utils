@@ -99,6 +99,9 @@ export class Lexer {
         else if (char === ")") {
             return { type: "CLOSED_PAREN" }
         }
+        else if (char === "@") {
+            return {type: "AT_SIGN"}
+        }
         else if (char === "|") {
             return { type: "PIPE" }
         }

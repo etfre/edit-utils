@@ -81,12 +81,12 @@ type GetActiveDocumentRequest = RequestBase & {
 }
 
 
-type ClientRequest = 
-    | PingRequest 
-    | SelectUntilPatternRequest 
-    | SelectInSurroundRequest 
-    | GetActiveDocumentRequest 
-    | SelectNodeRequest 
+type ClientRequest =
+    | PingRequest
+    | SelectUntilPatternRequest
+    | SelectInSurroundRequest
+    | GetActiveDocumentRequest
+    | SelectNodeRequest
     | ExecuteCommandRequest
     | GoToLineRequest
 
@@ -167,6 +167,10 @@ type QuestionMarkToken = {
     type: "QUESTION_MARK"
 }
 
+type AtSignToken = {
+    type: "AT_SIGN"
+}
+
 type PipeToken = {
     type: "PIPE"
 }
@@ -188,6 +192,7 @@ type Token =
     | PeriodToken
     | RuleRefToken
     | AsteriskToken
+    | AtSignToken
     | QuestionMarkToken
     | PipeToken
     | NotToken

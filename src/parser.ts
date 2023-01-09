@@ -243,6 +243,9 @@ export function parseInput(input: string): Selector {
                 tokenType.readyForOption = true;
                 break;
             }
+            case "AT_SIGN": {
+                break;
+            }
             case "NOT": {
                 break;
             }
