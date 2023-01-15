@@ -79,7 +79,7 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
             pathNodeGeneratorFn = ast.iterDirection("before", leaf, true);
         }
         else if (direction === "after") {
-            pathNodeGeneratorFn = ast.iterDirection("after", leaf);
+            pathNodeGeneratorFn = ast.iterDirection("after", leaf, true);
         }
         else {
             throw new Error("")

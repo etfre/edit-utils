@@ -10,7 +10,7 @@ export class Lexer {
         this.pos = 0;
     }
 
-    *read() {
+    *readIter() {
         while (!this.isAtEnd()) {
             yield this.peek();
             this.advance();
@@ -19,7 +19,7 @@ export class Lexer {
 
     readWhile(condition: (char: string) => boolean): string {
         let match = ""
-        for (const char of this.read()) {
+        for (const char of this.readIter()) {
             if (!condition(char)) {
                 break;
             }
@@ -60,7 +60,7 @@ export class Lexer {
             this.advance();
             let strContents = "";
             let isEscape = false;
-            for (const char of this.read()) {
+            for (const char of this.readIter()) {
                 if (isEscape) {
                     strContents += char;
                     isEscape = false;

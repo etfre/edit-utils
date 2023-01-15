@@ -76,6 +76,18 @@ type SelectNodeRequest = RequestBase & {
     }
 }
 
+type SmartActionRequest = RequestBase & {
+    method: "SELECT_NODE",
+    params: {
+        type: string,
+        pattern: string,
+        patterns: string[],
+        direction: "up" | "before" | "after"
+        selectType: "block" | "each"
+        count?: number
+    }
+}
+
 type GetActiveDocumentRequest = RequestBase & {
     method: "GET_ACTIVE_DOCUMENT"
 }
@@ -196,3 +208,59 @@ type Token =
     | QuestionMarkToken
     | PipeToken
     | NotToken
+
+type Action = "move" | "select" | "extend" | "swap"
+
+type Source = "anchor" | "active" | "start" | "end"
+
+type NodeTarget = {
+    selector: string,
+    count?: number
+    // direction: "backwards" | "forwards" | "smart"
+}
+
+type TextTarget = {
+    pattern: string
+    count?: number
+    // antiPattern?: string
+    // direction: "backwards" | "forwards"
+}
+
+// type TextTarget = {
+//     pattern: string
+//     antiPattern?: string
+//     direction: "backwards" | "forwards"
+// }
+
+type Target = NodeTarget | TextTarget
+
+type TextDirection = "backwards" | "forwards"
+type NodeDirection = "backwards" | "forwards" | "smart"
+type OnSelect = "cut" | "copy" | { type: "replace" }
+type TargetAndDirection = { target: TextTarget, direction: TextDirection } | { target: NodeTarget, direction: NodeDirection }
+
+type Move = {
+    action: "move"
+    from: Source
+} & TargetAndDirection
+
+type Select = {
+    action: "select"
+    from: Source
+    onSelect?: OnSelect
+} & TargetAndDirection
+
+type Extend = {
+    action: "extend"
+    from: Source
+    target: Target
+    onSelect?: OnSelect
+}
+
+type BidirectionalExtend = {
+    action: "BidirectionalExtend"
+    backwards: Target
+    forwards: Target
+    onSelect?: OnSelect
+}
+

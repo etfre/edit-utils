@@ -91,8 +91,8 @@ export function* iterDirection(
         const parent = pathNode.parent.node;
         const children = parent.node.children
         const siblingIter = isReverse ?
-            range(indexOfChild - 1, -1, -1) :
-            range(indexOfChild + 1, children.length)
+            sliceIndices(children, indexOfChild - 1, 0, -1) :
+            sliceIndices(children, indexOfChild + 1, children.length, 1)
         for (const siblingIdx of siblingIter) {
             const sibling = children[siblingIdx]
             for (const siblingPath of pathsChildrenFirst(sibling, isReverse)) {
@@ -239,7 +239,7 @@ function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
     // dictionary.pair[2]
     // dictionary.pair.value
     let matches: TreeNode[] = []
-    let isMatch = testNode(node, selector)
+    let isMatch = testNode(node, selector);
     const childSelector = selector.child
     const isSelectorLeaf = childSelector === null
     if (isMatch) {

@@ -94,9 +94,34 @@ function getLastMatch(lines: string[], pattern: string, antiPattern: string, fla
     return null;
 }
 
+function applyAction(
+    action: "select" | "before" | "after",
+    builder: vscode.TextEditorEdit,
+    selection: vscode.Selection,
+    marks: (vscode.Range | vscode.Selection)[]
+): vscode.Selection[] {
+    const selectionsToAdd: vscode.Selection[] = [];
+    for (const mark of marks) {
+        if ('anchor' in mark) {
+            mark.
+        }
+        if (action === "select") {
+            selectionsToAdd.push(new vscode.Selection(mark.start, mark.end));
+        }
+        else if (action === "before") {
+            selectionsToAdd.push(new vscode.Selection(mark.start, mark.start));
+        }
+        if (action === "after") {
+            selectionsToAdd.push(new vscode.Selection(mark.end, mark.end));
+        }
+    }
+    return selectionsToAdd
+}
+
 function deleteSelection(editor: vscode.TextEditor, allSelections: vscode.Selection[]) {
     return editor.edit(builder => {
         for (const selection of allSelections) {
+            let x = new vscode.Range(new vscode.Position(1, 1), new vscode.Position(3, 3))
             builder.replace(selection, "");
         };
     });
