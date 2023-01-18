@@ -4,6 +4,7 @@ import { watchFile, watch, writeFile, readFile, FSWatcher } from 'fs';
 import { tmpdir } from 'os';
 import * as handlers from "./handlers"
 import { sep, join } from 'path';
+import { ClientRequest, ClientResponse, ClientResponseError, ClientResponseResult } from './types';
 
 const RPC_INPUT_FILE = tmpdir() + sep + "speech-commands-input.json"
 const RPC_OUTPUT_FILE = tmpdir() + sep + "speech-commands-output.json"
@@ -26,6 +27,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SELECT_IN_SURROUND": handlers.handleSelectInSurround,
     "SELECT_NODE": handlers.handleSelectNode,
     "GET_ACTIVE_DOCUMENT": handlers.handleGetActiveDocument,
+    "SMART_ACTION": handlers.handleSmartAction,
 }
 
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {

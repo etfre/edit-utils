@@ -1,5 +1,3 @@
-// import * as vscode from "vscode"
-
 type JSONValue =
     | string
     | number
@@ -69,24 +67,12 @@ type SelectNodeRequest = RequestBase & {
     params: {
         type: string,
         pattern: string,
-        patterns: string[],
-        direction: "up" | "before" | "after"
+        direction: "smart" | "backwards" | "forwards"
         selectType: "block" | "each"
         count?: number
     }
 }
 
-type SmartActionRequest = RequestBase & {
-    method: "SELECT_NODE",
-    params: {
-        type: string,
-        pattern: string,
-        patterns: string[],
-        direction: "up" | "before" | "after"
-        selectType: "block" | "each"
-        count?: number
-    }
-}
 
 type GetActiveDocumentRequest = RequestBase & {
     method: "GET_ACTIVE_DOCUMENT"
@@ -101,6 +87,7 @@ type ClientRequest =
     | SelectNodeRequest
     | ExecuteCommandRequest
     | GoToLineRequest
+    | SmartActionRequest
 
 type ClientResponseResult = JSONValue
 
@@ -209,58 +196,69 @@ type Token =
     | PipeToken
     | NotToken
 
-type Action = "move" | "select" | "extend" | "swap"
-
 type Source = "anchor" | "active" | "start" | "end"
 
 type NodeTarget = {
     selector: string,
+    getEvery?: boolean
+    side?: "start" | "end"
     count?: number
-    // direction: "backwards" | "forwards" | "smart"
 }
 
 type TextTarget = {
     pattern: string
+    antiPattern?: string
+    side?: "start" | "end"
     count?: number
-    // antiPattern?: string
-    // direction: "backwards" | "forwards"
 }
-
-// type TextTarget = {
-//     pattern: string
-//     antiPattern?: string
-//     direction: "backwards" | "forwards"
-// }
 
 type Target = NodeTarget | TextTarget
 
-type TextDirection = "backwards" | "forwards"
-type NodeDirection = "backwards" | "forwards" | "smart"
-type OnSelect = "cut" | "copy" | { type: "replace" }
-type TargetAndDirection = { target: TextTarget, direction: TextDirection } | { target: NodeTarget, direction: NodeDirection }
+type OnSelect = "delete" | "cut" | "copy" | { type: "replace" }
+// type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } |{ target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
+type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } |{ target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
 
-type Move = {
-    action: "move"
-    from: Source
-} & TargetAndDirection
-
-type Select = {
-    action: "select"
-    from: Source
+type SmartActionParams = {
+    source: Source
+    action: "move" | "select" | "delete" | "cut" | "copy" | { type: "replace" }
+    target: Target,
+    direction: "backwards" | "forwards" | "smart",
     onSelect?: OnSelect
 } & TargetAndDirection
 
-type Extend = {
-    action: "extend"
-    from: Source
-    target: Target
-    onSelect?: OnSelect
+type SmartActionRequest = RequestBase & {
+    method: "SMART_ACTION",
+    params: SmartActionParams
+}
+// type BidirectionalExtendParams = {
+//     backwards: Target
+//     forwards: Target
+//     onSelect?: OnSelect
+// }
+
+// type BidirectionalExtendRequest = RequestBase & {
+//     method: "BIDIRECTIONAL_EXTEND",
+//     params: BidirectionalExtendParams
+// }
+
+type NodeSearchContext = {
+    type: "nodeSearchContext"
+    root: TreeNode
+    selector: Selector
+    direction: "backwards" | "forwards" | "smart"
+    count: number
+    side: "start" | "end" | null
+    getEvery: boolean
 }
 
-type BidirectionalExtend = {
-    action: "BidirectionalExtend"
-    backwards: Target
-    forwards: Target
-    onSelect?: OnSelect
+type TextSearchContext = {
+    type: "textSearchContext"
+    pattern: string
+    antiPattern: string
+    ignoreCase: boolean
+    direction: "backwards" | "forwards"
+    count: number
+    side: "start" | "end" | null
 }
 
+export type SearchContext = NodeSearchContext | TextSearchContext

@@ -1,4 +1,5 @@
 import { Lexer } from "./lexer"
+import { Token } from "./types"
 import { assert, assertIsDefined, assertIsNullish, isNullish } from "./util"
 
 export type Selector = {

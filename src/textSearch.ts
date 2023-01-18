@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { TextSearchContext } from './types';
 
 const parseTreeExtension: vscode.Extension<any> = vscode.extensions.getExtension("pokey.parse-tree") as any;
 
@@ -27,7 +28,38 @@ function matchAll(pattern: string, test: string, flags: string = "") {
 /**
  * Get the position of the pattern in the editor
  */
-function getPatternPosition(
+export function getPatternRange(
+    currentCursor: vscode.Position,
+    searchContext: TextSearchContext,
+    fileText: string,
+): vscode.Range | null {
+    const reverse = searchContext.direction === "backwards";
+    let flags = '';
+    if (searchContext.ignoreCase) {
+        flags += "i"
+    }
+    let lines = fileText.split('\n');
+    if (reverse) {
+        lines = lines.reverse();
+    }
+    const result = getLastMatch(lines, searchContext.pattern, searchContext.antiPattern, flags, searchContext.count, reverse);
+    if (result === null) return null;
+    const { match, lineNumber } = result;
+    const endPosLine = reverse ? (currentCursor.line - lineNumber) : (currentCursor.line + lineNumber);
+    let index = match.index;
+    if (!reverse && endPosLine === currentCursor.line) { // pattern in same line as cursor line
+         index += currentCursor.character;
+    }
+    const matchText = match[1]
+    const endOfPatternIndex = index + matchText.length;
+    const start = new vscode.Position(endPosLine, index)
+    const end = new vscode.Position(endPosLine, endOfPatternIndex)
+    return new vscode.Range(start, end);
+}
+/**
+ * Get the position of the pattern in the editor
+ */
+export function getPatternPosition(
     currentCursor: vscode.Position,
     text: string,
     pattern: string,
@@ -36,7 +68,7 @@ function getPatternPosition(
     reverse: boolean = false,
     isIgnoreCase: boolean = false,
     isPatternInclude: boolean = false,
-) {
+): vscode.Position | null {
     let flags = '';
     if (isIgnoreCase) {
         flags += "i"
@@ -59,7 +91,7 @@ function getPatternPosition(
         if (endPosLine == currentCursor.line) { // pattern in same line as cursor line
             endPosIndex = index + currentCursor.character;
         } else {
-            endPosIndex = index;
+            endPosIndex = index; 
         }
     }
     if (reverse) {
@@ -94,29 +126,29 @@ function getLastMatch(lines: string[], pattern: string, antiPattern: string, fla
     return null;
 }
 
-function applyAction(
-    action: "select" | "before" | "after",
-    builder: vscode.TextEditorEdit,
-    selection: vscode.Selection,
-    marks: (vscode.Range | vscode.Selection)[]
-): vscode.Selection[] {
-    const selectionsToAdd: vscode.Selection[] = [];
-    for (const mark of marks) {
-        if ('anchor' in mark) {
-            mark.
-        }
-        if (action === "select") {
-            selectionsToAdd.push(new vscode.Selection(mark.start, mark.end));
-        }
-        else if (action === "before") {
-            selectionsToAdd.push(new vscode.Selection(mark.start, mark.start));
-        }
-        if (action === "after") {
-            selectionsToAdd.push(new vscode.Selection(mark.end, mark.end));
-        }
-    }
-    return selectionsToAdd
-}
+// function applyAction(
+//     action: "select" | "before" | "after",
+//     builder: vscode.TextEditorEdit,
+//     selection: vscode.Selection,
+//     marks: (vscode.Range | vscode.Selection)[]
+// ): vscode.Selection[] {
+//     const selectionsToAdd: vscode.Selection[] = [];
+//     for (const mark of marks) {
+//         if ('anchor' in mark) {
+//             mark.
+//         }
+//         if (action === "select") {
+//             selectionsToAdd.push(new vscode.Selection(mark.start, mark.end));
+//         }
+//         else if (action === "before") {
+//             selectionsToAdd.push(new vscode.Selection(mark.start, mark.start));
+//         }
+//         if (action === "after") {
+//             selectionsToAdd.push(new vscode.Selection(mark.end, mark.end));
+//         }
+//     }
+//     return selectionsToAdd
+// }
 
 function deleteSelection(editor: vscode.TextEditor, allSelections: vscode.Selection[]) {
     return editor.edit(builder => {

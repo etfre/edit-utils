@@ -1,13 +1,120 @@
 import * as vscode from 'vscode';
-import { findAndSelection } from "./core"
+import { findAndSelection, getPatternRange } from "./textSearch"
 import * as ast from "./ast"
 import * as dsl from "./parser"
-import { mergeGenerators } from './util';
+import { assert, mergeGenerators } from './util';
 import { performance } from 'perf_hooks';
+import { ExecuteCommandRequest, GoToLineRequest, SearchContext, SelectInSurroundRequest, SelectNodeRequest, SelectUntilPatternRequest, SmartActionParams, Target, TreeNode } from './types';
+import { findNode } from './nodeSearch';
 
 
 export async function handlePing() {
     return {}
+}
+
+export function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
+    const searchContext = createSearchContext(editor, params.target, params.direction);
+    const newSelectionsOrRanges: (vscode.Selection | vscode.Range)[] = [];
+    const action = params.action;
+    const side = params.target.side ?? null;
+    for (const selection of editor.selections) {
+        const targets = findTargets(editor, selection, searchContext);
+        if (targets === null) {
+            continue;
+        }
+        for (const target of targets) {
+            if (action === "select") {
+                newSelectionsOrRanges.push(target)
+            }
+            else if (action === "move") {
+                assert(side !== null);
+                const newPos = target[side];
+                newSelectionsOrRanges.push(new vscode.Selection(newPos, newPos))
+            }
+            else {
+                throw new Error(`unrecognized action`)
+            }
+        }
+    }
+    const newSelections = newSelectionsOrRanges.map(x => {
+        if (!('anchor' in x)) {
+            return new vscode.Selection(x.start, x.end);
+        }
+        return x;
+    })
+    editor.selections = newSelections;
+}
+
+function applyAction(matches: vscode.Range[]) {
+
+}
+
+function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
+    let textRange: vscode.Range;
+    if (reverse) {
+        const lastLine = editor.document.lineAt(0);
+        textRange = new vscode.Range(startedSelection, lastLine.range.start);
+    } else {
+        const lastLine = editor.document.lineAt(editor.document.lineCount - 1);
+        textRange = new vscode.Range(startedSelection, lastLine.range.end);
+    }
+
+    return editor.document.getText(textRange);
+}
+
+function createSearchContext(editor: vscode.TextEditor, target: Target, direction: "backwards" | "forwards" | "smart"): SearchContext {
+    const count = target.count ?? 1;
+    const side = target.side ?? null;
+    if ('selector' in target) {
+        const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
+        const root = tree.rootNode
+        ast.dump(root);
+        const selector = dsl.parseInput(target.selector);
+        const getEvery = target.getEvery ?? false;
+        return {
+            type: "nodeSearchContext",
+            count, 
+            root,
+            direction,
+            selector,
+            side,
+            getEvery
+        }
+    }
+    else {
+        const pattern = target.pattern;
+        const antiPattern = target.antiPattern ?? "";
+        assert(direction !== "smart")
+        return { type: "textSearchContext", direction, count, pattern, antiPattern, side, ignoreCase: true }
+    }
+}
+
+function getSource(selection: vscode.Selection, direction: "backwards" | "forwards" | "smart") {
+    if (direction === "backwards") {
+        return selection.start;
+    }
+    else if (direction === "forwards") {
+        return selection.end;
+    }
+    else {
+        return selection.active;
+    }
+}
+
+function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selection, searchContext: SearchContext) {
+    const source = getSource(sourceSelection, searchContext.direction);
+    if (searchContext.type === "nodeSearchContext") {
+        return findNode(sourceSelection, source, searchContext);
+    }
+    else if (searchContext.type === "textSearchContext") {
+        const reverse = searchContext.direction === "backwards"
+        const fileText = getTextRange(editor, reverse, source)
+        const result = getPatternRange(source, searchContext, fileText)
+        if (result !== null) {
+            return [result];
+        }
+    }
+    return null;
 }
 
 export async function handleGetActiveDocument(editor: vscode.TextEditor) {
@@ -61,8 +168,8 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
     ast.dump(root);
-    const selectors = params.patterns.map(dsl.parseInput);
-    const direction = params.direction;
+    const selector = dsl.parseInput(params.pattern);
+    const direction = params.direction as any;
     let newSelections: vscode.Selection[] = [];
     for (const selection of editor.selections) {
         const cursorPosition = selection.active;
@@ -72,19 +179,19 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
         }
         const leaf = path.getLeaf();
         let pathNodeGeneratorFn: Generator<ast.PathNode>;
-        if (direction === "up") {
+        if (direction === "smart") {
             pathNodeGeneratorFn = mergeGenerators(leaf.iterUp(), ast.iterClosest(cursorPosition, leaf));
         }
-        else if (direction === "before") {
-            pathNodeGeneratorFn = ast.iterDirection("before", leaf, true);
+        else if (direction === "backwards") {
+            pathNodeGeneratorFn = ast.iterDirection("backwards", leaf, true);
         }
-        else if (direction === "after") {
-            pathNodeGeneratorFn = ast.iterDirection("after", leaf, true);
+        else if (direction === "forwards") {
+            pathNodeGeneratorFn = ast.iterDirection("forwards", leaf, true);
         }
         else {
             throw new Error("")
         }
-        for (const matches of ast.search(pathNodeGeneratorFn, selectors)) {
+        for (const matches of ast.search(pathNodeGeneratorFn, selector)) {
             const filteredMatches = matches.filter(x => filterMatch(x, selection, direction));
             if (filteredMatches.length > 0) {
                 if (params.selectType === "block") {
@@ -107,7 +214,7 @@ export async function handleSelectNode(editor: vscode.TextEditor, params: Select
     }
 }
 
-function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "before" | "after" | "up"): boolean {
+function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "before" | "after" | "smart"): boolean {
     if (direction === "before") {
         return ast.vscodePositionFromNodePosition(testNode.startPosition).isBefore(selection.anchor);
     }

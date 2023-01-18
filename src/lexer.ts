@@ -1,4 +1,5 @@
 import assert = require("assert");
+import { Token } from "./types";
 
 export class Lexer {
 

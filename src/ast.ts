@@ -1,6 +1,7 @@
 import * as vscode from "vscode"
 import { yieldSubtypes } from "./nodeLoader";
 import * as dsl from "./parser"
+import { TreeNode } from "./types";
 import { assert, range, reversed, sliceArray, sliceIndices } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
@@ -37,22 +38,22 @@ export function* pathsChildrenFirst(
 }
 
 
-export function* search(pathNodeGenerator: Generator<PathNode>, selectors: dsl.Selector[]): Generator<TreeNode[]> {
+export function* search(pathNodeGenerator: Generator<PathNode>, selector: dsl.Selector): Generator<TreeNode[]> {
     for (let pathNode of pathNodeGenerator) {
-        const matches = findMatches(pathNode, selectors);
+        const matches = findMatches(pathNode, selector);
         if (matches.length > 0) {
             yield matches;
         }
     }
 }
 
-export function findMatches(pathNode: PathNode, selectors: dsl.Selector[]): TreeNode[] {
-    const match = matchNodeEntryBottomUp(pathNode, selectors)
+export function findMatches(pathNode: PathNode, selector: dsl.Selector): TreeNode[] {
+    const match = matchNodeEntryBottomUp(pathNode, selector)
     if (match !== null) {
         return [match];
     }
     else {
-        const { matches, selector } = matchNodeEntry(pathNode.node, selectors)
+        const matches = matchNodeEntry(pathNode.node, selector)
         if (matches.length > 0) {
             const formattedMatches = matches.map(match => {
                 const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
@@ -65,12 +66,12 @@ export function findMatches(pathNode: PathNode, selectors: dsl.Selector[]): Tree
 }
 
 export function* iterDirection(
-    direction: "before" | "after",
+    direction: "backwards" | "forwards",
     pathLeaf: PathNode,
     yieldDirect = false
 ): Generator<PathNode> {
-    const isReverse = direction === "before";
-    if (direction === "after") {
+    const isReverse = direction === "backwards";
+    if (direction === "forwards") {
         const parent = pathLeaf.parent;
         const childNodes = Array.from(pathsChildrenFirst(pathLeaf.node, isReverse));
         childNodes.pop();
@@ -105,8 +106,8 @@ export function* iterDirection(
 }
 
 export function* iterClosest(from: vscode.Position, pathLeaf: PathNode): Generator<PathNode> {
-    const beforeIter = iterDirection("before", pathLeaf, false);
-    const afterIter = iterDirection("after", pathLeaf, false);
+    const beforeIter = iterDirection("backwards", pathLeaf, false);
+    const afterIter = iterDirection("forwards", pathLeaf, false);
     let beforeCurr = beforeIter.next();
     let afterCurr = afterIter.next();
     let beforeTest = beforeCurr.done ? null : vscodePositionFromNodePosition(beforeCurr.value.node.endPosition);
@@ -328,21 +329,17 @@ function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[
     return addedOptionals.reverse()
 }
 
-function matchNodeEntry(node: TreeNode, selectors: dsl.Selector[]): { matches: TreeNode[], selector: dsl.Selector | null } {
-    for (const selector of selectors) {
-        const matches = matchSingleNode(node, selector)
-        if (matches.length > 0) {
-            return { matches, selector }
-        }
+function matchNodeEntry(node: TreeNode, selector: dsl.Selector): TreeNode[] {
+    const matches = matchSingleNode(node, selector)
+    if (matches.length > 0) {
+        return matches;
     }
-    return { matches: [], selector: null }
+    return []
 }
-function matchNodeEntryBottomUp(node: PathNode, selectors: dsl.Selector[]): TreeNode | null {
-    for (const selector of selectors) {
-        const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector))
-        if (match !== null) {
-            return match;
-        }
+function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector): TreeNode | null {
+    const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector))
+    if (match !== null) {
+        return match;
     }
     return null;
 }
@@ -465,6 +462,25 @@ export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
         throw new Error("At least one node is required for a selection")
     }
     return new vscode.Selection(anchor, active)
+}
+
+export function rangeFromNodeArray(nodes: TreeNode[]) {
+    let start: vscode.Position | null = null
+    let end: vscode.Position | null = null
+    for (const node of nodes) {
+        const startPosition = vscodePositionFromNodePosition(node.startPosition)
+        const endPosition = vscodePositionFromNodePosition(node.endPosition)
+        if (start === null || startPosition.isBefore(start)) {
+            start = startPosition
+        }
+        if (end === null || endPosition.isAfter(end)) {
+            end = endPosition
+        }
+    }
+    if (start === null || end === null) {
+        throw new Error("At least one node is required for a selection")
+    }
+    return new vscode.Range(start, end)
 }
 
 export class PathNode {
