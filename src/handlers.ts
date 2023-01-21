@@ -31,6 +31,15 @@ export function handleSmartAction(editor: vscode.TextEditor, params: SmartAction
                 const newPos = target[side];
                 newSelectionsOrRanges.push(new vscode.Selection(newPos, newPos))
             }
+            else if (action === "extend") {
+                if (selection.active.isBefore(selection.anchor) && target.start.isBefore(selection.active)) {
+                    newSelectionsOrRanges.push(new vscode.Selection(selection.anchor, target.start))
+                }
+                else {
+                    const merged = selection.union(target)
+                    newSelectionsOrRanges.push(merged)
+                }
+            }
             else {
                 throw new Error(`unrecognized action`)
             }
@@ -43,10 +52,6 @@ export function handleSmartAction(editor: vscode.TextEditor, params: SmartAction
         return x;
     })
     editor.selections = newSelections;
-}
-
-function applyAction(matches: vscode.Range[]) {
-
 }
 
 function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
@@ -73,7 +78,7 @@ function createSearchContext(editor: vscode.TextEditor, target: Target, directio
         const getEvery = target.getEvery ?? false;
         return {
             type: "nodeSearchContext",
-            count, 
+            count,
             root,
             direction,
             selector,

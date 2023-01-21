@@ -1,15 +1,15 @@
 {
-	"name": "select-until-pattern",
-	"displayName": "Select until pattern",
+	"name": "corgi",
+	"displayName": "Corgi",
 	"description": "Offers several actions to quickly enlarge your selection by selecting text from the current position of your cursor to the pattern and actions described on the user input.",
-	"version": "0.0.4",
+	"version": "0.0.5",
 	"publisher": "hajdaini",
 	"author": {
 		"name": "hajdaini"
 	},
 	"icon": "images/icon.png",
 	"license": "MIT",
-	"homepage": "https://github.com/hajdaini/select-until-pattern",
+	"homepage": "https://github.com/hajdaini/corgi",
 	"keywords": [
 		"select",
 		"move",
@@ -41,16 +41,6 @@
 	],
 	"main": "./out/extension.js",
 	"contributes": {
-		"commands": [
-			{
-				"command": "extension.select-until-pattern",
-				"title": "Select until pattern"
-			},
-			{
-				"command": "extension.select-in-surround",
-				"title": "Select in surround"
-			}
-		],
 		"configuration": {
 			"title": "select-until-pattern",
 			"properties": {

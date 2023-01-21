@@ -4,16 +4,15 @@ import { fileURLToPath } from 'url';
 
 const SUBTYPES_BY_LANG: Map<string, { [node in string]: string[] }> = new Map();
 
-export function initSubtypes(root: string) {
-    const langsFolder = join(root, "src", "langs");
+export function initSubtypes(langsRoot: string) {
     const prom: Promise<void> = new Promise((resolve, reject) => {
-        readdir(langsFolder, { withFileTypes: true }, (err, items) => {
+        readdir(langsRoot, { withFileTypes: true }, (err, items) => {
             if (err !== null) {
                 reject(err);
             }
             const langFiles = items.filter(x => x.isFile() && x.name.endsWith(".json"));
             for (const file of langFiles) {
-                const path = join(langsFolder, file.name);
+                const path = join(langsRoot, file.name);
                 const lang = file.name.split('.')[0];
                 readFile(path, { encoding: 'utf-8' }, async (err, data) => {
                     if (err) {
@@ -21,6 +20,7 @@ export function initSubtypes(root: string) {
                     }
                     const langSubtypes = parseNodeTypes(JSON.parse(data));
                     SUBTYPES_BY_LANG.set(lang, langSubtypes);
+                    console.log(`Loaded language: ${lang}`)
                     if (SUBTYPES_BY_LANG.size === langFiles.length) {
                         resolve();
                     }

@@ -5,13 +5,12 @@ import * as nodeLoader from "./nodeLoader";
 
 export async function activate(context: vscode.ExtensionContext) {
     console.log(context.extensionUri);
-    const extensionRoot = context.extensionPath;
-    await Promise.all([setup(), nodeLoader.initSubtypes(extensionRoot)]);
+    let langsRoot = context.asAbsolutePath("langs");
+    await Promise.all([setup(), nodeLoader.initSubtypes(langsRoot)]);
     watchRPCInputFile();
     setInterval(watchRPCInputFile, 10000)
 }
 
 export async function deactivate() {
     shutdown()
-
 }

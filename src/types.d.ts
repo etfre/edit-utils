@@ -220,7 +220,7 @@ type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwar
 
 type SmartActionParams = {
     source: Source
-    action: "move" | "select" | "delete" | "cut" | "copy" | { type: "replace" }
+    action: "move" | "select" | "extend" | "delete" | "cut" | "copy" | { type: "replace" }
     target: Target,
     direction: "backwards" | "forwards" | "smart",
     onSelect?: OnSelect

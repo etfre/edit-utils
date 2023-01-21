@@ -48,6 +48,7 @@ export function watchRPCInputFile() {
     const path = RPC_INPUT_FILE
     try {
         if (inputFileWatcher === null) {
+            console.log("inputFileWatcher init -1")
             inputFileWatcher = watch(path, { persistent: true }, () => handleRpcInputFileChange(path))
             console.log("inputFileWatcher init")
         }
