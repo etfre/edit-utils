@@ -22,28 +22,17 @@ type PingRequest = RequestBase & {
     method: "PING"
 }
 
-type SelectUntilPatternRequest = RequestBase & {
-    method: "SELECT_UNTIL_PATTERN"
-    params: {
-        pattern: string,
-        antiPattern?: string,
-        count?: number,
-        deleteSelection?: boolean
-        isMove?: boolean
-        ignoreCase?: boolean
-        reverse?: boolean
-        isPatternInclude?: boolean
-    }
-}
 type SelectInSurroundRequest = RequestBase & {
     method: "SELECT_IN_SURROUND"
     params: {
+        action: "move" | "select" | "extend",
         left: string,
         right: string,
+        onDone?: OnDone
         count?: number,
         deleteSelection?: boolean
         ignoreCase?: boolean
-        isPatternInclude?: boolean
+        includeLastMatch?: boolean
     }
 }
 
@@ -62,29 +51,9 @@ type GoToLineRequest = RequestBase & {
     }
 }
 
-type SelectNodeRequest = RequestBase & {
-    method: "SELECT_NODE",
-    params: {
-        type: string,
-        pattern: string,
-        direction: "smart" | "backwards" | "forwards"
-        selectType: "block" | "each"
-        count?: number
-    }
-}
-
-
-type GetActiveDocumentRequest = RequestBase & {
-    method: "GET_ACTIVE_DOCUMENT"
-}
-
-
 type ClientRequest =
     | PingRequest
-    | SelectUntilPatternRequest
     | SelectInSurroundRequest
-    | GetActiveDocumentRequest
-    | SelectNodeRequest
     | ExecuteCommandRequest
     | GoToLineRequest
     | SmartActionRequest
@@ -207,23 +176,21 @@ type NodeTarget = {
 
 type TextTarget = {
     pattern: string
-    antiPattern?: string
     side?: "start" | "end"
     count?: number
 }
 
 type Target = NodeTarget | TextTarget
 
-type OnSelect = "delete" | "cut" | "copy" | { type: "replace" }
-// type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } |{ target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
+type OnDone = "delete" | "cut" | "copy" | { type: "replace" }
 type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } |{ target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
 
 type SmartActionParams = {
     source: Source
-    action: "move" | "select" | "extend" | "delete" | "cut" | "copy" | { type: "replace" }
+    action: "move" | "select" | "extend"
     target: Target,
     direction: "backwards" | "forwards" | "smart",
-    onSelect?: OnSelect
+    onDone?: onDone
 } & TargetAndDirection
 
 type SmartActionRequest = RequestBase & {
@@ -254,11 +221,17 @@ type NodeSearchContext = {
 type TextSearchContext = {
     type: "textSearchContext"
     pattern: string
-    antiPattern: string
     ignoreCase: boolean
     direction: "backwards" | "forwards"
     count: number
     side: "start" | "end" | null
 }
 
-export type SearchContext = NodeSearchContext | TextSearchContext
+type SurroundSearchContext = {
+    type: "surroundSearchContext"
+    left: TextSearchContext
+    right: TextSearchContext
+    includeLastMatch: boolean
+}
+
+export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext

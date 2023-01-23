@@ -23,10 +23,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "GO_TO_LINE": handlers.handleGoToLine,
     "EXECUTE_COMMAND": handlers.handleExecuteCommand,
     "PING": handlers.handlePing,
-    "SELECT_UNTIL_PATTERN": handlers.handleSelectUntilPattern,
-    "SELECT_IN_SURROUND": handlers.handleSelectInSurround,
-    "SELECT_NODE": handlers.handleSelectNode,
-    "GET_ACTIVE_DOCUMENT": handlers.handleGetActiveDocument,
+    "SELECT_IN_SURROUND": handlers.handleSurroundAction,
     "SMART_ACTION": handlers.handleSmartAction,
 }
 
