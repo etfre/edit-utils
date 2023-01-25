@@ -152,8 +152,8 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
 }
 
 
-export function findNodePathToPosition(position: vscode.Position, node: TreeNode): PathNode | null {
-    if (!doesNodeContainPosition(node, position)) {
+export function findNodePathToPosition(position: vscode.Position, node: TreeNode, allowApproximateMatch: boolean = true ): PathNode | null {
+    if (!doesNodeContainPosition(node, position) && !allowApproximateMatch) {
         return null;
     }
     const path = new PathNode(node);
@@ -161,16 +161,16 @@ export function findNodePathToPosition(position: vscode.Position, node: TreeNode
         const childIdx = findClosestChildIndex(position, node.children, 0, node.childCount - 1);
         const childNode = node.children[childIdx];
         const isPositionInChild = doesNodeContainPosition(childNode, position);
-        if (isPositionInChild) {
-            const childResult = findNodePathToPosition(position, childNode)
+        if (isPositionInChild|| allowApproximateMatch) {
+            const childResult = findNodePathToPosition(position, childNode, allowApproximateMatch)
             if (childResult !== null) {
                 path.setChild(childResult, childIdx);
             }
         }
         // this indicates we have a non-leaf node but none of the children contain the position
-        else {
-            path.setChild(new PathNode(childNode), childIdx);
-        }
+        // else if (allowApproximateMatch) {
+        //     path.setChild(new PathNode(childNode), childIdx);
+        // }
     }
     return path;
 }
@@ -190,7 +190,7 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
     }
     else {
         // if position is less than the first or greater than the last child, just return that child
-        if (cmp === -1 && mid === low || cmp === 1 && mid === high) {
+        if (cmp === -1 && mid === 0 || cmp === 1 && mid === children.length - 1) {
             return mid;
         }
         const diff = high - low;
@@ -208,6 +208,15 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
                 adjacentIdx = mid + 1;
                 adjacantPos = vscodePositionFromNodePosition(children[adjacentIdx].startPosition)
             }
+            const adjacentNode = children[adjacentIdx];
+            // tiebreaker if we don't have an exact match: default to a named node
+            // if possible, otherwise the closest
+            if (child.isNamed() && !adjacentNode.isNamed()) {
+                return mid;
+            }
+            else if (adjacentNode.isNamed()) {
+                return adjacentIdx;
+            }
             return getClosest(position, midPos, adjacantPos) >= 0 ? mid : adjacentIdx
         }
         if (cmp === -1) {
@@ -218,21 +227,6 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
         }
     }
     throw new Error("")
-}
-
-function findClosestPosition(from: vscode.Position, testPositions: vscode.Position[]): number {
-    if (testPositions.length === 0) {
-        throw new Error("")
-    }
-    let closestIdx = 0;
-    let closestPosition = testPositions[0];
-    for (const [i, pos] of testPositions.slice(1).entries()) {
-        if (getClosest(from, closestPosition, pos) > 0) {
-            closestIdx = i;
-            closestPosition = pos;
-        }
-    }
-    return closestIdx;
 }
 
 function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
@@ -350,6 +344,7 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
     let firstMatch: TreeNode | null = null;
     while (currSelector !== null && currNode !== null) {
         // traversing up we're testing one particular node so any multiple selector doesn't match
+        const currParent = currNode.parent;
         if (dsl.isMultiple(currSelector)) {
             return null;
         }
@@ -416,13 +411,13 @@ function compareNodeWithPosition(node: TreeNode, testPosition: vscode.Position):
     if (testPosition.isBeforeOrEqual(nodeStartPosition)) {
         return -1
     }
-    else if (testPosition.isAfter(nodeEndPosition)) {
+    else if (testPosition.isAfterOrEqual(nodeEndPosition)) {
         return 1
     }
     return 0;
 }
 
-function doesNodeContainPosition(node: TreeNode, testPosition: vscode.Position): boolean {
+export function doesNodeContainPosition(node: TreeNode, testPosition: vscode.Position): boolean {
     return compareNodeWithPosition(node, testPosition) === 0;
 }
 

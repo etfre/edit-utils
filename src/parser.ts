@@ -247,6 +247,9 @@ export function parseInput(input: string): Selector {
             case "AT_SIGN": {
                 break;
             }
+            case "COMMA": {
+                break;
+            }
             case "NOT": {
                 break;
             }

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { getPatternRange } from "./textSearch"
+import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } from "./textSearch"
 import * as ast from "./ast"
 import * as dsl from "./parser"
 import { assert, mergeGenerators } from './util';
@@ -41,7 +41,7 @@ function doThing2(
                 newSelectionsOrRanges.push(new vscode.Selection(newPos, newPos));
             }
             else if (action === "extend") {
-                const newTarget = side === null ? target : new vscode.Range(target[side], target[side]); 
+                const newTarget = side === null ? target : new vscode.Range(target[side], target[side]);
                 if (selection.active.isBefore(selection.anchor) && newTarget.start.isBefore(selection.active)) {
                     newSelectionsOrRanges.push(new vscode.Selection(selection.anchor, newTarget.start));
                 }
@@ -138,7 +138,10 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
         }
         const forwardsTargets = findTargets(editor, sourceSelection, searchContext.right);
         if (forwardsTargets !== null) {
-            return [backwardsTargets[0].union(forwardsTargets[0])]
+            const match = searchContext.includeLastMatch ?
+                backwardsTargets[0].union(forwardsTargets[0]) :
+                new vscode.Range( backwardsTargets[0].end,  forwardsTargets[0].start);
+            return [match]
         }
     }
     return null;
@@ -146,10 +149,12 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
 
 export async function handleSurroundAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
     const count = params.count ?? 1;
+    const left = params.left ?? BACKWARDS_SURROUND_CHARS;
+    const right = params.right ?? FORWARDS_SURROUND_CHARS;
     const searchContext: SurroundSearchContext = {
         type: "surroundSearchContext",
-        left: { type: "textSearchContext", direction: "backwards", pattern: params.left, count, ignoreCase: true, side: null },
-        right: { type: "textSearchContext", direction: "forwards", pattern: params.right, count, ignoreCase: true, side: null },
+        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null },
+        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null },
         includeLastMatch: params.includeLastMatch ?? true
     }
     const onDone = params.onDone ?? null;

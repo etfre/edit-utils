@@ -126,6 +126,9 @@ export class Lexer {
         else if (char === "?") {
             return { type: "QUESTION_MARK" }
         }
+        else if (char === ",") {
+            return { type: "COMMA" }
+        }
         throw new Error(`Unrecognized character ${char}`)
     }
 

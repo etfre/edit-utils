@@ -26,8 +26,8 @@ type SelectInSurroundRequest = RequestBase & {
     method: "SELECT_IN_SURROUND"
     params: {
         action: "move" | "select" | "extend",
-        left: string,
-        right: string,
+        left: string | null,
+        right: string | null,
         onDone?: OnDone
         count?: number,
         deleteSelection?: boolean
@@ -73,6 +73,7 @@ type TreeNode = {
     children: Array<TreeNode>
     endIndex: number
     endPosition: { row: number, column: number }
+    isNamed: () => boolean
     parent: TreeNode | null
     startIndex: number
     startPosition: { row: number, column: number }
@@ -146,6 +147,9 @@ type PipeToken = {
 type NotToken = {
     type: "NOT"
 }
+type CommaToken = {
+    type: "COMMA"
+}
 
 type Token =
     | NameToken
@@ -164,6 +168,7 @@ type Token =
     | QuestionMarkToken
     | PipeToken
     | NotToken
+    | CommaToken
 
 type Source = "anchor" | "active" | "start" | "end"
 
