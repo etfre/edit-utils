@@ -25,6 +25,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "PING": handlers.handlePing,
     "SELECT_IN_SURROUND": handlers.handleSurroundAction,
     "SMART_ACTION": handlers.handleSmartAction,
+    "SURROUND_INSERT": handlers.handleSurroundInsert,
 }
 
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
@@ -45,7 +46,6 @@ export function watchRPCInputFile() {
     const path = RPC_INPUT_FILE
     try {
         if (inputFileWatcher === null) {
-            console.log("inputFileWatcher init -1")
             inputFileWatcher = watch(path, { persistent: true }, () => handleRpcInputFileChange(path))
             console.log("inputFileWatcher init")
         }

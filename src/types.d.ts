@@ -25,7 +25,7 @@ type PingRequest = RequestBase & {
 type SelectInSurroundRequest = RequestBase & {
     method: "SELECT_IN_SURROUND"
     params: {
-        action: "move" | "select" | "extend",
+        action: "move" | "select" | "extend" | "currentSelection",
         left: string | null,
         right: string | null,
         onDone?: OnDone
@@ -57,6 +57,7 @@ type ClientRequest =
     | ExecuteCommandRequest
     | GoToLineRequest
     | SmartActionRequest
+    | SurroundInsertRequest
 
 type ClientResponseResult = JSONValue
 
@@ -187,8 +188,14 @@ type TextTarget = {
 
 type Target = NodeTarget | TextTarget
 
-type OnDone = "delete" | "cut" | "copy" | { type: "replace" }
-type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } |{ target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
+type OnDone =
+    | { type: "delete" }
+    | { type: "cut" } 
+    | { type: "copy" } 
+    | { type: "executeCommand", commandName: string } 
+    | { type: "surroundReplace", left: string, right: string } 
+    | { type: "surroundInsert", left: string, right: string }
+type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } | { target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
 
 type SmartActionParams = {
     source: Source
@@ -202,16 +209,11 @@ type SmartActionRequest = RequestBase & {
     method: "SMART_ACTION",
     params: SmartActionParams
 }
-// type BidirectionalExtendParams = {
-//     backwards: Target
-//     forwards: Target
-//     onSelect?: OnSelect
-// }
 
-// type BidirectionalExtendRequest = RequestBase & {
-//     method: "BIDIRECTIONAL_EXTEND",
-//     params: BidirectionalExtendParams
-// }
+type SurroundInsertRequest = RequestBase & {
+    method: "SURROUND_INSERT"
+    params: { left: string, right: string }
+}
 
 type NodeSearchContext = {
     type: "nodeSearchContext"
@@ -221,6 +223,7 @@ type NodeSearchContext = {
     count: number
     side: "start" | "end" | null
     getEvery: boolean
+    resultInfo: { [key in string]: any }
 }
 
 type TextSearchContext = {
@@ -230,6 +233,7 @@ type TextSearchContext = {
     direction: "backwards" | "forwards"
     count: number
     side: "start" | "end" | null
+    resultInfo: { [key in string]: any }
 }
 
 type SurroundSearchContext = {
@@ -237,6 +241,7 @@ type SurroundSearchContext = {
     left: TextSearchContext
     right: TextSearchContext
     includeLastMatch: boolean
+    resultInfo: { [key in string]: any }
 }
 
 export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext

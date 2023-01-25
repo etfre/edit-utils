@@ -161,7 +161,7 @@ export function findNodePathToPosition(position: vscode.Position, node: TreeNode
         const childIdx = findClosestChildIndex(position, node.children, 0, node.childCount - 1);
         const childNode = node.children[childIdx];
         const isPositionInChild = doesNodeContainPosition(childNode, position);
-        if (isPositionInChild|| allowApproximateMatch) {
+        if (isPositionInChild || allowApproximateMatch) {
             const childResult = findNodePathToPosition(position, childNode, allowApproximateMatch)
             if (childResult !== null) {
                 path.setChild(childResult, childIdx);
@@ -214,10 +214,10 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
             if (child.isNamed() && !adjacentNode.isNamed()) {
                 return mid;
             }
-            else if (adjacentNode.isNamed()) {
+            else if (adjacentNode.isNamed() && !child.isNamed()) {
                 return adjacentIdx;
             }
-            return getClosest(position, midPos, adjacantPos) >= 0 ? mid : adjacentIdx
+            return getClosest(position, midPos, adjacantPos) <= 0 ? mid : adjacentIdx
         }
         if (cmp === -1) {
             return findClosestChildIndex(position, children, low, mid - 1);

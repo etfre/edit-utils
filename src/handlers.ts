@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } from "./textSearch"
 import * as ast from "./ast"
 import * as dsl from "./parser"
-import { assert, mergeGenerators } from './util';
-import { ExecuteCommandRequest, GoToLineRequest, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundSearchContext, Target, TreeNode } from './types';
+import { assert, mergeGenerators, unEscapeRegex } from './util';
+import { ExecuteCommandRequest, GoToLineRequest, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TreeNode } from './types';
 import { findNode } from './nodeSearch';
 
 
@@ -11,15 +11,39 @@ export async function handlePing() {
     return {}
 }
 
-export function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
+export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
     const searchContext = createSearchContext(editor, params.target, params.direction);
     const side = params.target.side ?? null;
     const onDone = params.onDone ?? null;
-    doThing2(params.action, editor, searchContext, side, onDone);
+    await doThing2(params.action, editor, searchContext, side, onDone);
 }
 
-function doThing2(
-    action: "move" | "select" | "extend",
+export async function handleSurroundInsert(editor: vscode.TextEditor, params: SurroundInsertRequest['params']) {
+    for (const selection of editor.selections) {
+        const text = editor.document.getText(selection)
+        editor.edit(builder => {
+            builder.replace(selection, `${params.left}${text}${params.right}`);
+        });
+    }
+}
+
+export async function handleSurroundAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
+    const count = params.count ?? 1;
+    const left = params.left ?? BACKWARDS_SURROUND_CHARS;
+    const right = params.right ?? FORWARDS_SURROUND_CHARS;
+    const searchContext: SurroundSearchContext = {
+        type: "surroundSearchContext",
+        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
+        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
+        includeLastMatch: params.includeLastMatch ?? true,
+        resultInfo: {}
+    }
+    const onDone = params.onDone ?? null;
+    await doThing2(params.action, editor, searchContext, null, onDone);
+}
+
+async function doThing2(
+    action: "move" | "select" | "extend" | "currentSelection",
     editor: vscode.TextEditor,
     searchContext: SearchContext,
     side: "start" | "end" | null,
@@ -27,6 +51,10 @@ function doThing2(
 ) {
     const newSelectionsOrRanges: (vscode.Selection | vscode.Range)[] = [];
     for (const selection of editor.selections) {
+        if (action === "currentSelection") {
+            newSelectionsOrRanges.push(selection);
+            continue;
+        }
         const targets = findTargets(editor, selection, searchContext);
         if (targets === null) {
             continue;
@@ -61,8 +89,30 @@ function doThing2(
         }
         return x;
     });
-    if (onDone === null || true) {
+    if (onDone === null || !["surroundReplace"].includes(onDone.type)) {
         editor.selections = newSelections;
+    }
+    if (onDone !== null) {
+        if (onDone.type === "executeCommand") {
+            await vscode.commands.executeCommand(onDone.commandName);
+        }
+        else {
+            for (const selection of newSelections) {
+                doOnDone(editor, selection, onDone, searchContext)
+            }
+        }
+    }
+}
+
+function doOnDone(editor: vscode.TextEditor, selection: vscode.Selection, onDone: OnDone, searchContext: SearchContext) {
+    if (onDone.type === "surroundReplace") {
+        assert(searchContext.type === "surroundSearchContext")
+        const leftLength = searchContext.left.resultInfo.matchLength;
+        const rightLength = searchContext.right.resultInfo.matchLength;
+        const text = editor.document.getText(selection).slice(leftLength, -rightLength);
+        editor.edit(builder => {
+            builder.replace(selection, `${onDone.left}${text}${onDone.right}`)
+        });
     }
 }
 
@@ -95,13 +145,14 @@ function createSearchContext(editor: vscode.TextEditor, target: Target, directio
             direction,
             selector,
             side,
-            getEvery
+            getEvery,
+            resultInfo: {}
         }
     }
     else {
         const pattern = target.pattern;
         assert(direction !== "smart")
-        return { type: "textSearchContext", direction, count, pattern, side, ignoreCase: true }
+        return { type: "textSearchContext", direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
     }
 }
 
@@ -140,25 +191,11 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
         if (forwardsTargets !== null) {
             const match = searchContext.includeLastMatch ?
                 backwardsTargets[0].union(forwardsTargets[0]) :
-                new vscode.Range( backwardsTargets[0].end,  forwardsTargets[0].start);
+                new vscode.Range(backwardsTargets[0].end, forwardsTargets[0].start);
             return [match]
         }
     }
     return null;
-}
-
-export async function handleSurroundAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
-    const count = params.count ?? 1;
-    const left = params.left ?? BACKWARDS_SURROUND_CHARS;
-    const right = params.right ?? FORWARDS_SURROUND_CHARS;
-    const searchContext: SurroundSearchContext = {
-        type: "surroundSearchContext",
-        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null },
-        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null },
-        includeLastMatch: params.includeLastMatch ?? true
-    }
-    const onDone = params.onDone ?? null;
-    doThing2(params.action, editor, searchContext, null, onDone);
 }
 
 export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLineRequest['params']) {

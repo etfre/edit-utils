@@ -79,3 +79,7 @@ export function* mergeGenerators<T>(...generators: Generator<T>[]) {
         yield* gen
     }
 }
+
+export function unEscapeRegex(escaped: string) {
+    return escaped.replace(/\\(.)/g, '$1');
+}

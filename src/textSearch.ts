@@ -20,7 +20,6 @@ export const BACKWARDS_SURROUND_CHARS = ['"""', '"', "'''", "'", '`', "{", "(", 
 export const FORWARDS_SURROUND_CHARS = ['"""', '"', "'''", "'", '`', "}", ")", "]"].map(x => escapeRegExp(x)).join('|');
 export const BACKWARDS_ANTIPATTERN = ["}", ")", "]"].map(x => escapeRegExp(x)).join('|');
 export const FORWARDS_ANTIPATTERN = ["{", "(", "["].map(x => escapeRegExp(x)).join('|');
-console.log(BACKWARDS_SURROUND_CHARS)
 
 function matchAll(pattern: string, test: string, flags: string = "") {
     if (!flags.includes("g")) {
@@ -68,6 +67,7 @@ export function getPatternRange(
         index += fromPos.character;
     }
     const matchText = match[1]
+    searchContext.resultInfo.matchLength = matchText.length;
     const endOfPatternIndex = index + matchText.length;
     const start = new vscode.Position(endPosLine, index)
     const end = new vscode.Position(endPosLine, endOfPatternIndex)

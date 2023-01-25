@@ -9,7 +9,6 @@ export function findNode(selection: vscode.Selection, source: vscode.Position, s
         return null;
     }
     const leaf = path.getLeaf();
-    path.dump()
     let pathNodeGeneratorFn: Generator<ast.PathNode>;
     if (searchContext.direction === "smart") {
         pathNodeGeneratorFn = mergeGenerators(leaf.iterUp(), ast.iterClosest(source, leaf));
