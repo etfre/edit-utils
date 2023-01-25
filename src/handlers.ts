@@ -3,7 +3,7 @@ import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } fr
 import * as ast from "./ast"
 import * as dsl from "./parser"
 import { assert, mergeGenerators, unEscapeRegex } from './util';
-import { ExecuteCommandRequest, GoToLineRequest, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TreeNode } from './types';
+import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TreeNode } from './types';
 import { findNode } from './nodeSearch';
 
 
@@ -11,6 +11,25 @@ export async function handlePing() {
     return {}
 }
 
+export async function handleExecuteCommandsPerSelection(editor: vscode.TextEditor, params: ExecuteCommandsPerSelectionRequest['params']) {
+    for (const selection of editor.selections) {
+        for (let i = 0; i < params.count; i++) {
+            for (const cmd of params.commands) {
+                await vscode.commands.executeCommand(cmd)
+            }
+        }
+    }
+    if (params.onDone) {
+        if (params.onDone.type === "executeCommand") {
+            await vscode.commands.executeCommand(params.onDone.commandName);
+        }
+        else {
+            for (const selection of editor.selections) {
+                doOnDone(editor, selection, params.onDone)
+            }
+        }
+    }
+}
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
     const searchContext = createSearchContext(editor, params.target, params.direction);
     const side = params.target.side ?? null;
@@ -104,9 +123,9 @@ async function doThing2(
     }
 }
 
-function doOnDone(editor: vscode.TextEditor, selection: vscode.Selection, onDone: OnDone, searchContext: SearchContext) {
+function doOnDone(editor: vscode.TextEditor, selection: vscode.Selection, onDone: OnDone, searchContext?: SearchContext) {
     if (onDone.type === "surroundReplace") {
-        assert(searchContext.type === "surroundSearchContext")
+        assert(searchContext?.type === "surroundSearchContext")
         const leftLength = searchContext.left.resultInfo.matchLength;
         const rightLength = searchContext.right.resultInfo.matchLength;
         const text = editor.document.getText(selection).slice(leftLength, -rightLength);

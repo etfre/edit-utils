@@ -26,6 +26,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SELECT_IN_SURROUND": handlers.handleSurroundAction,
     "SMART_ACTION": handlers.handleSmartAction,
     "SURROUND_INSERT": handlers.handleSurroundInsert,
+    "EXECUTE_COMMANDS_PER_SELECTION": handlers.handleExecuteCommandsPerSelection,
 }
 
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {

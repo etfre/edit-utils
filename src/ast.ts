@@ -176,12 +176,10 @@ export function findNodePathToPosition(position: vscode.Position, node: TreeNode
 }
 
 function findClosestChildIndex(position: vscode.Position, children: TreeNode[], low: number, high: number): number {
-    if (low > high) {
-        throw new Error("");
-    }
     if (children.length === 1) {
         return 0;
     }
+    assert(low <= high);
     const mid = Math.floor((high + low) / 2);
     const child = children[mid]
     const cmp = compareNodeWithPosition(child, position);
@@ -194,7 +192,7 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
             return mid;
         }
         const diff = high - low;
-        if (diff === 0) {
+        if (diff === 0 || (low === mid && cmp === -1) || (high === mid && cmp === 1)) {
             let midPos: vscode.Position
             let adjacentIdx: number;
             let adjacantPos: vscode.Position

@@ -44,6 +44,15 @@ type ExecuteCommandRequest = RequestBase & {
     }
 }
 
+type ExecuteCommandsPerSelectionRequest = RequestBase & {
+    method: "EXECUTE_COMMANDS_PER_SELECTION"
+    params: {
+        commands: string[],
+        onDone?: OnDone
+        count: number
+    }
+}
+
 type GoToLineRequest = RequestBase & {
     method: "GO_TO_LINE"
     params: {
@@ -58,6 +67,7 @@ type ClientRequest =
     | GoToLineRequest
     | SmartActionRequest
     | SurroundInsertRequest
+    | ExecuteCommandsPerSelectionRequest
 
 type ClientResponseResult = JSONValue
 
