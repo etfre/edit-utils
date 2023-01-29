@@ -1,39 +1,52 @@
 export function sliceArray<T>(arr: T[], start: number = 0, stop: number | null = null, step: number = 1): Array<T> {
     const sliced: T[] = []
     for (let idx of sliceIndices(arr, start, stop, step)) {
+        assert(idx >= 0 && idx <= arr.length)
         sliced.push(arr[idx])
     }
     return sliced;
 }
 
 export function* sliceIndices(arr: any[], start: number, stop: number | null = null, step: number) {
-    const arrLength = arr.length
-    if (stop === null) stop = arrLength;
-    else if (stop < 0) {
-        stop = arrLength + stop
-    }
     if (step === 0) {
         throw new Error("Step cannot be 0")
     }
-    const isReverse = step < 0;
-    if (!isReverse) {
-        if (stop <= start) return;
+    const isForward = step > 0;
+    const arrLength = arr.length
+    if (start < 0) {
+        start = arrLength + start;
+    }
+    if (stop === null) {
+        stop = isForward ? Infinity : -Infinity
+    }
+    else if (stop < 0) {
+        stop = arrLength + stop
+    }
+    if (isForward) {
+        stop = Math.min(arrLength, stop)
+    }
+    else {
+        stop = Math.max(-1, stop);
+    }
+    if (isForward) {
         for (let i = start; i < stop; i += step) {
+            assert(i >= 0 && i <= arrLength)
             yield i
         }
     }
     else {
-        if (stop >= start) return;
         for (let i = start; i > stop; i += step) {
+            assert(i >= 0 && i <= arrLength)
             yield i
         }
     }
 }
 
-export function range(start: number, stop: number, step = 1): number[] {
 
-    return Array(Math.ceil((stop - start) / step)).fill(start).map((x, y) => x + y * step)
-}
+// export function range(start: number, stop: number, step = 1): number[] {
+
+//     return Array(Math.ceil((stop - start) / step)).fill(start).map((x, y) => x + y * step)
+// }
 
 export function backwardsThroughZero(start: number) {
     const arr = []

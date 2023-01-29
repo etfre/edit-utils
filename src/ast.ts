@@ -1,8 +1,9 @@
 import * as vscode from "vscode"
+import { Directive, isOptionalDirective} from "./directives";
 import { yieldSubtypes } from "./nodeLoader";
 import * as dsl from "./parser"
 import { TreeNode } from "./types";
-import { assert, range, reversed, sliceArray, sliceIndices } from "./util";
+import { assert, reversed, sliceArray, sliceIndices } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
 
@@ -53,16 +54,8 @@ export function findMatches(pathNode: PathNode, selector: dsl.Selector): TreeNod
         return [match];
     }
     else {
-        const matches = matchNodeEntry(pathNode.node, selector)
-        if (matches.length > 0) {
-            const formattedMatches = matches.map(match => {
-                const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector);
-                return addedOptionals.length === 0 ? match : addedOptionals[0]
-            })
-            return formattedMatches
-        }
+        return matchNodeEntryTopDown(pathNode.node, selector)
     }
-    return [];
 }
 
 export function* iterDirection(
@@ -152,7 +145,7 @@ function nodesOverlap(a: TreeNode, b: TreeNode) {
 }
 
 
-export function findNodePathToPosition(position: vscode.Position, node: TreeNode, allowApproximateMatch: boolean = true ): PathNode | null {
+export function findNodePathToPosition(position: vscode.Position, node: TreeNode, allowApproximateMatch: boolean = true): PathNode | null {
     if (!doesNodeContainPosition(node, position) && !allowApproximateMatch) {
         return null;
     }
@@ -227,77 +220,117 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
     throw new Error("")
 }
 
-function matchSingleNode(node: TreeNode, selector: dsl.Selector): TreeNode[] {
+
+function testNode(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext, testDirectives: boolean) {
+    const tokenType = selector.tokenType.type
+    if (tokenType === "name" && !testTokenName(node, selector.tokenType)) {
+        return false;
+    }
+
+    if (tokenType === "choice" &&
+        !selector.tokenType.options.some(selectorOption => testTokenName(node, selectorOption))) {
+        return false;
+    }
+    // assert(tokenType === "wildcard")
+    // ignoring slices here - does it matter?
+    if (testDirectives) {
+        for (const directiveGroup of selector.directives) {
+            for (const directive of directiveGroup.directives) {
+                if (!directive.matchNode(node, matchContext)) {
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+function testTokenName(node: TreeNode, tokenType: dsl.Name) {
+    const editor = vscode.window.activeTextEditor as vscode.TextEditor
+    for (const nodeType of yieldSubtypes(tokenType.value, editor.document.languageId)) {
+        if (nodeType === node.type) {
+            return true;
+        }
+    }
+    return false;
+}
+
+function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
+    return { max: Infinity, reverse: false }
+    // if (slice.stop !== null && slice.stop >= 0) {
+    //     return 
+    // }
+    // for (let i = startIdx; i < directives.length; i++) {
+    //     const nodeOrDirective = directives[i];
+    //     if ("start" in nodeOrDirective) {
+    //         return nodeOrDirective.stop;
+    //     }
+    // }
+    // // implicit 1 at the end
+    // return 1;
+}
+
+function matchNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
     // dictionary.pair[]
     // dictionary.pair[2]
     // dictionary.pair.value
-    let matches: TreeNode[] = []
-    let isMatch = testNode(node, selector);
+    let nextMax = getNextSliceMax(selector.directives[0].sliceAtEnd);
+    let remainingNodes: TreeNode[] = [];
+    for (let node of nodes) {
+        if (remainingNodes.length >= nextMax.max) {
+            break;
+        }
+        if (testNode(node, selector, matchContext, false)) {
+            remainingNodes.push(node)
+        }
+    }
+    for (const directivesGroup of selector.directives) {
+        let filteredRemainingNodes: TreeNode[] = [];
+        for (const node of remainingNodes) {
+            if (remainingNodes.length >= nextMax.max) {
+                break;
+            }
+            let nodeMatches = true;
+            for (const directive of directivesGroup.directives) {
+                if (!directive.matchNode(node, matchContext)) {
+                    nodeMatches = false;
+                    break
+                }
+            }
+            if (nodeMatches) {
+                filteredRemainingNodes.push(node);
+            }
+        }
+        const slice = directivesGroup.sliceAtEnd
+        remainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
+    }
+
+    let isMatch = remainingNodes.length > 0;
     const childSelector = selector.child
     const isSelectorLeaf = childSelector === null
     if (isMatch) {
         if (isSelectorLeaf) {
-            matches.push(node)
+            return remainingNodes;
         }
         else {
-            return matchNodeChildren(node.children, childSelector);
-        }
-    }
-    else if (selector.isOptional && !isSelectorLeaf) {
-        return matchSingleNode(node, childSelector);
-    }
-    return matches
-}
-
-function testNode(node: TreeNode, selector: dsl.Selector) {
-    if (selector.tokenType.type === "name" || selector.tokenType.type === "ruleRef") {
-        return testTokenNameOrRuleRef(node, selector.tokenType);
-    }
-
-    if (selector.tokenType.type === "choice") {
-        return selector.tokenType.options.some(selectorOption => testTokenNameOrRuleRef(node, selectorOption));
-    }
-    assert(selector.tokenType.type === "wildcard")
-    return true;
-}
-
-function testTokenNameOrRuleRef(node: TreeNode, tokenType: dsl.Name | dsl.RuleRef) {
-    const editor = vscode.window.activeTextEditor as vscode.TextEditor
-    if (tokenType.type === "name") {
-        for (const nodeType of yieldSubtypes(tokenType.value, editor.document.languageId)) {
-            if (nodeType === node.type) {
-                return true;
+            let subMatches: TreeNode[] = []
+            for (const matchedNode of remainingNodes) {
+                subMatches = subMatches.concat(matchNodes(matchedNode.children, childSelector, matchContext));
             }
-        }
-        return false;
-    }
-    throw new Error("unimplemented ruleref")
-}
-
-function matchNodeChildren(children: TreeNode[], selector: dsl.Selector) {
-    const childIsMultiple = dsl.isMultiple(selector)
-    if (selector.filter !== null) {
-        const filterSlice = selector.filter;
-        children = sliceArray(children, filterSlice.start, filterSlice.stop, filterSlice.step)
-    }
-    if (childIsMultiple) {
-        return matchMultipleNodes(children, selector);
-    }
-    else {
-        for (const child of children) {
-            const childResult = matchSingleNode(child, selector);
-            if (childResult.length > 0) {
-                return [...childResult];
-            }
+            remainingNodes = subMatches;
         }
     }
-    return []
+    if (selector.isOptional && !isSelectorLeaf && remainingNodes.length === 0) {
+        return matchNodes(nodes, childSelector, matchContext);
+    }
+    return remainingNodes;
 }
 
-function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[] {
+
+function traverseUpOptionals(match: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
     let currSelector = selector;
     let optionalsBeforeMatch = 0;
-    while (currSelector.isOptional && !testNode(match, currSelector)) {
+    while (currSelector.isOptional && !testNode(match, currSelector, matchContext, true)) {
         optionalsBeforeMatch++
         currSelector = currSelector.child as dsl.Selector
     }
@@ -311,7 +344,7 @@ function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[
             if (parentTestNode === null) {
                 break
             }
-            if (testNode(parentTestNode, parentTestSelector)) {
+            if (testNode(parentTestNode, parentTestSelector, matchContext, true)) {
                 addedOptionals.push(parentTestNode)
                 parentTestNode = parentTestNode;
                 parentTestSelector = parentTestSelector.parent as dsl.Selector
@@ -321,35 +354,37 @@ function traverseUpOptionals(match: TreeNode, selector: dsl.Selector): TreeNode[
     return addedOptionals.reverse()
 }
 
-function matchNodeEntry(node: TreeNode, selector: dsl.Selector): TreeNode[] {
-    const matches = matchSingleNode(node, selector)
+function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector): TreeNode[] {
+    const matchContext = new MatchContext();
+    const matches = matchNodes([node], selector, matchContext)
     if (matches.length > 0) {
-        return matches;
+        const formattedMatches = matches.map(match => {
+            const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector, matchContext);
+            return addedOptionals.length === 0 ? match : addedOptionals[0]
+        })
+        return formattedMatches
     }
     return []
 }
-function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector): TreeNode | null {
-    const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector))
+function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector,): TreeNode | null {
+    const matchContext = new MatchContext();
+    const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector), matchContext)
     if (match !== null) {
         return match;
     }
     return null;
 }
 
-function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector): TreeNode | null {
+function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
     let currNode: PathNode | null = node;
     let currSelector: dsl.Selector | null = leafSelector;
     let firstMatch: TreeNode | null = null;
     while (currSelector !== null && currNode !== null) {
         // traversing up we're testing one particular node so any multiple selector doesn't match
-        const currParent = currNode.parent;
         if (dsl.isMultiple(currSelector)) {
             return null;
         }
-        if (testNode(currNode.node, currSelector)) {
-            if (nodeIsFilteredOut(currNode, currSelector)) {
-                return null;
-            }
+        if (testNode(currNode.node, currSelector, matchContext, true)) {
             if (firstMatch === null) {
                 firstMatch = currNode.node;
             }
@@ -366,38 +401,6 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
     return firstMatch;
 }
 
-function nodeIsFilteredOut(node: PathNode, selector: dsl.Selector) {
-    const filterSlice = selector.filter
-    if (filterSlice === null) {
-        return false;
-    }
-    const parent = node.parent;
-    const [children, indexOfChild] = parent === null ? [[node.node], 0] : [parent.node.node.children, parent.indexOfChild];
-    for (const idx of sliceIndices(children, filterSlice.start, filterSlice.stop, filterSlice.step)) {
-        if (idx === indexOfChild) {
-            return false;
-        }
-    }
-    return true;
-}
-
-
-function matchMultipleNodes(nodes: TreeNode[], childSelector: dsl.Selector): TreeNode[] {
-    let matches: TreeNode[] = []
-    for (const node of nodes) {
-        const nodeMatches = matchSingleNode(node, childSelector)
-        matches = matches.concat(nodeMatches)
-    }
-    if (childSelector.index !== null) {
-        const index = childSelector.index < 0 ? matches.length - 1 + childSelector.index : childSelector.index
-        matches = [matches[index]]
-    }
-    if (childSelector.slice !== null) {
-        const slice = childSelector.slice
-        matches = sliceArray(matches, slice.start, slice.stop, slice.step)
-    }
-    return matches
-}
 
 export function vscodePositionFromNodePosition(nodePosition: { row: number, column: number }) {
     return new vscode.Position(nodePosition.row, nodePosition.column)
@@ -541,4 +544,13 @@ export class PathNode {
         }
     }
 
+}
+
+export class MatchContext {
+    mark: TreeNode[] | null
+    skippedOptionalsCount: number
+    constructor() {
+        this.mark = null;
+        this.skippedOptionalsCount = 0;
+    }
 }

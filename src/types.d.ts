@@ -134,11 +134,6 @@ type PeriodToken = {
     type: "PERIOD"
 }
 
-type RuleRefToken = {
-    type: "RULE_REF"
-    ruleName: string
-}
-
 type AsteriskToken = {
     type: "ASTERISK"
 }
@@ -173,7 +168,6 @@ type Token =
     | ClosedParenToken
     | ColonToken
     | PeriodToken
-    | RuleRefToken
     | AsteriskToken
     | AtSignToken
     | QuestionMarkToken

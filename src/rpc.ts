@@ -60,25 +60,19 @@ export function watchRPCInputFile() {
     }
 }
 
-async function handleClientMessage(msg: ClientRequest) {
+async function handleClientMessage(msg: ClientRequest, editor: vscode.TextEditor) {
     const messageType = msg.method
     let errorMsg: string | null = null;
     let errorData: string | null = null;
     let result: any = null
     if (messageType in clientMessageHandlers) {
         const handler = clientMessageHandlers[messageType]
-        const editor = vscode.window.activeTextEditor;
-        if (editor) {
-            try {
-                result = await handler(editor, msg.params)
-            }
-            catch (e) {
-                console.error((e as any).stack)
-                errorMsg = "Handler error " + e;
-            }
+        try {
+            result = await handler(editor, msg.params)
         }
-        else {
-            errorMsg = "No editor open"
+        catch (e) {
+            console.error((e as any).stack)
+            errorMsg = "Handler error " + e;
         }
     }
     if (errorMsg !== null) {
@@ -97,6 +91,10 @@ async function handleClientMessage(msg: ClientRequest) {
 async function handleRpcInputFileChange(path: string) {
     readFile(path, { encoding: 'utf-8' }, async (err, data) => {
         if (!err) {
+            const editor = vscode.window.activeTextEditor;
+            if (!editor) {
+                return;
+            }
             const responses: ClientResponse[] = []
             const clientMessage: ClientRequest | ClientRequest[] = JSON.parse(data);
             const isMultiple = Array.isArray(clientMessage);
@@ -110,7 +108,7 @@ async function handleRpcInputFileChange(path: string) {
                 if (processedClientMessageIds.length > processedClientMessageIdsMaxSize) {
                     processedClientMessageIds.shift()
                 }
-                const resp = await handleClientMessage(clientMsg)
+                const resp = await handleClientMessage(clientMsg, editor)
                 responses.push(resp)
                 messageRPCClient(resp)
             }

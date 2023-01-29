@@ -1,16 +1,19 @@
+import { Directive,isOptionalDirective,  } from "./directives"
 import { Lexer } from "./lexer"
 import { Token } from "./types"
 import { assert, assertIsDefined, assertIsNullish, isNullish } from "./util"
 
 export type Selector = {
     type: "Selector"
-    tokenType: Name | Choice | RuleRef | Wildcard
+    tokenType: Name | Choice | Wildcard
     isOptional: boolean
     parent: Selector | null
     child: Selector | null
-    index: number | null
-    filter: Slice | null
-    slice: Slice | null
+    // index: number | null
+    // filter: Slice | null
+    // slice: Slice | null
+    isMark: boolean
+    directives: { directives: Directive[], sliceAtEnd: Slice }[]
 }
 
 export type Name = {
@@ -24,25 +27,20 @@ export type Wildcard = {
 
 export type Choice = {
     type: "choice"
-    options: (Name | RuleRef)[]
-}
-
-export type RuleRef = {
-    type: "ruleRef"
-    ruleName: string
+    options: (Name)[]
 }
 
 type SliceOrIndexState = null | { stage: "index", num?: number } | { isFilter: boolean, stage: "start" | "stop" | "step", slice: Slice }
 
 
-type Slice = {
+export type Slice = {
     start: number
     stop: number | null
     step: number
 }
 
 type ParseState = {
-    tokenType: null | Name | RuleRef | Wildcard | (Choice & { isDone: boolean, readyForOption: boolean })
+    tokenType: null | Name | Wildcard | (Choice & { isDone: boolean, readyForOption: boolean })
     isOptional: boolean
     index: number | null
     slice: Slice | null
@@ -60,6 +58,11 @@ function defaultParseStates(): ParseState {
     return { tokenType, isOptional, index, slice, filter, sliceOrIndexState }
 }
 
+function sliceFromIndex(index: number): Slice {
+    const stop = index === -1 ? null : index + 1;
+    return { start: index, stop, step: 1 }
+}
+
 function selectorFromParseState(
     parseTokenType: ParseState['tokenType'],
     isOptional: ParseState['isOptional'],
@@ -70,16 +73,33 @@ function selectorFromParseState(
     if (parseTokenType === null) {
         throw new Error("");
     }
+
     const tokenType: Selector['tokenType'] = parseTokenType.type === "choice" ?
         { options: parseTokenType.options, type: "choice" } :
         { ...parseTokenType };
+    let directivesGroup: Directive[] = []
+    const directives: { directives: Directive[], sliceAtEnd: Slice }[] = [];
+    // if (isOptional) {
+    //     directivesGroup.push(new isOptionalDirective());
+    // }
+    if (sliceState !== null) {
+        directives.push({directives: directivesGroup, sliceAtEnd: { ...sliceState }});
+        directivesGroup = []
+    }
+    // if (filterState !== null) {
+    //     directives.push(new FilterDirective(filterState.start, filterState.stop, filterState.step));
+    // }
+    if (index !== null) {
+        directives.push({directives: directivesGroup, sliceAtEnd: sliceFromIndex(index)});
+        directivesGroup = []
+    }
+    directives.push({directives: directivesGroup, sliceAtEnd: {start: 0, stop: 1, step:1}})
     const selector: Selector = {
         type: "Selector",
         tokenType: tokenType,
         isOptional,
-        index: index,
-        filter: filterState,
-        slice: sliceState,
+        isMark: false,
+        directives,
         parent: null,
         child: null
     }
@@ -92,6 +112,15 @@ function linkSelectors(parent: Selector, child: Selector) {
     child.parent = parent
 }
 
+class Parser {
+    tokens: Token[]
+    constructor(tokens: Token[]) {
+        this.tokens = tokens;
+    }
+    peek() {
+
+    }
+}
 
 export function parseInput(input: string): Selector {
     const tokens = new Lexer(input).tokenize();
@@ -179,17 +208,6 @@ export function parseInput(input: string): Selector {
                 }
                 break;
             }
-            case "RULE_REF": {
-                if (tokenType === null) {
-                    tokenType = { type: "ruleRef", ruleName: token.ruleName }
-                }
-                else if (tokenType.type === "choice") {
-                    assert(tokenType.readyForOption)
-                    tokenType.options.push({ type: "ruleRef", ruleName: token.ruleName })
-                    tokenType.readyForOption = false;
-                }
-                break;
-            }
             case "NUMBER": {
                 assertIsDefined(sliceOrIndexState)
                 if (sliceOrIndexState.stage === "index") {
@@ -218,7 +236,7 @@ export function parseInput(input: string): Selector {
             }
             case "OPEN_PAREN": {
                 assert(tokenType === null)
-                tokenType = {type: "choice", readyForOption: true, options: [], isDone: false}
+                tokenType = { type: "choice", readyForOption: true, options: [], isDone: false }
                 break;
             }
             case "PERIOD": {
@@ -273,24 +291,27 @@ export function parseInput(input: string): Selector {
         throw new Error("No Selector successfully parsed")
     }
     // simpler if root is always a single node
-    if (isMultiple(root)) {
-        const newRoot: Selector = {
-            type: "Selector",
-            isOptional: false,
-            tokenType: { type: "wildcard" },
-            child: root,
-            parent: null,
-            index: null,
-            filter: null,
-            slice: null,
-        }
-        root = newRoot
-    }
+    // if (isMultiple(root)) {
+    //     const newRoot: Selector = {
+    //         type: "Selector",
+    //         isOptional: false,
+    //         tokenType: { type: "wildcard" },
+    //         child: root,
+    //         parent: null,
+    //         index: null,
+    //         filter: null,
+    //         slice: null,
+    //         directives: [],
+    //     }
+    //     root = newRoot
+    // }
     return root
 }
 
 export function isMultiple(selector: Selector) {
-    return selector.slice !== null || selector.index !== null
+    // very crude and will produce false positives b/c it doesn't handle slices intelligently, fix later
+    const lastSlice = selector.directives[selector.directives.length - 1].sliceAtEnd
+    return selector.directives.length > 1 || !(lastSlice.start === 0 && lastSlice.stop === 1 && lastSlice.step === 1)
 }
 
 export function getLeafSelector(selector: Selector): Selector {
