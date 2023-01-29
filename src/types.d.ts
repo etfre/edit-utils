@@ -175,6 +175,18 @@ type Token =
     | NotToken
     | CommaToken
 
+type TokenType = Token['type']
+
+type ExtractOnProp<T, K extends keyof T, V> =
+    T extends unknown ? V extends T[K] ?
+    { [P in keyof T]: P extends K ? T[P] & V : T[P] }
+    : never : never
+
+type TokenOptions<V extends TokenType> = ExtractOnProp<Token, "type", V>
+
+// type Foo<T extends Token['type']> = Foo.type is true
+
+
 type Source = "anchor" | "active" | "start" | "end"
 
 type NodeTarget = {
