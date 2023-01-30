@@ -104,14 +104,6 @@ type NumberToken = {
     value: number
 }
 
-type OpenCurlyBraceToken = {
-    type: "OPEN_CURLY_BRACE"
-}
-
-type ClosedCurlyBraceToken = {
-    type: "CLOSED_CURLY_BRACE"
-}
-
 type OpenBracketToken = {
     type: "OPEN_BRACKET"
 }
@@ -161,8 +153,6 @@ type CommaToken = {
 type Token =
     | NameToken
     | NumberToken
-    | OpenCurlyBraceToken
-    | ClosedCurlyBraceToken
     | OpenBracketToken
     | ClosedBracketToken
     | OpenParenToken

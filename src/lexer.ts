@@ -82,12 +82,6 @@ export class Lexer {
             }
             return { type: "NAME", value: strContents }
         }
-        else if (char === "{") {
-            return { type: "OPEN_CURLY_BRACE" }
-        }
-        else if (char === "}") {
-            return { type: "CLOSED_CURLY_BRACE" }
-        }
         else if (char === "[") {
             return { type: "OPEN_BRACKET" }
         }
