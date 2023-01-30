@@ -76,7 +76,6 @@ async function doThing2(
         }
         const targets = findTargets(editor, selection, searchContext);
         if (targets === null || targets.length === 0) {
-            console.log('no match found')
             continue;
         }
         for (const target of targets) {

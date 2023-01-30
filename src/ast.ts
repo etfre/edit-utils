@@ -394,12 +394,11 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
     while (currSelector !== null && currNode !== null) {
         let parent = currNode.parent;
         let nodesToTest = parent === null ? [currNode.node] : parent.node.node.children;
-        if (node.node.type === "class") {
-            let f = 123;
-        }
         const matched = testNodes(nodesToTest, currSelector, matchContext, false);
         const currId = currNode.node.id;
-        const isMatch = matched.some(x => x.id === currId);
+        const isMatch = currSelector.isLastSliceImplicit ? // distinguish between *[6] and *
+            matched.some(x => x.id === currId) :
+            matched.length === 1 && matched[0].id === currId;
         if (isMatch) {
             if (firstMatch === null) {
                 firstMatch = currNode.node;
@@ -412,6 +411,15 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
         }
         else { // mismatch on a required field
             return null;
+        }
+    }
+    if (firstMatch !== null) {
+        // if we hit the root node with remaining selectors, need to check they're all optional
+        while (currSelector !== null) {
+            if (!currSelector.isOptional) {
+                return null;
+            }
+            currSelector = currSelector.parent;
         }
     }
     return firstMatch;

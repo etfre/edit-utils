@@ -202,10 +202,11 @@ class Parser {
         let stages = ["start", "stop", "step"] as const;
         let stageIdx = 0;
         let colonRequired = false;
-        let slice: Slice = defaultSlice();
         if (this.match(this.peek(), "CLOSED_BRACKET")) { // []
-            return slice;
+            this.advance();
+            return {start: 0, stop: null, step: 1};
         } 
+        let slice: Slice = defaultSlice();
         while (stageIdx < stages.length) {
             const stage = stages[stageIdx];
             const nextTok = this.require("NUMBER", "COLON", "CLOSED_BRACKET");
