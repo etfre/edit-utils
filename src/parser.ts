@@ -107,11 +107,12 @@ class Parser {
     }
 
     finalizeLeafSelector() {
-        const leafSelector = this.selector;
+        const leafSelector = this.lastSelector;
         if (this.currentDirectivesGroup.length > 0 || leafSelector.directives.length === 0) {
-            leafSelector.directives.push({directives: this.currentDirectivesGroup, sliceAtEnd: {start: 0, stop: 1, step: 1}});
+            leafSelector.directives.push({directives: [...this.currentDirectivesGroup], sliceAtEnd: {start: 0, stop: 1, step: 1}});
             leafSelector.isLastSliceImplicit = true;
         }
+        this.currentDirectivesGroup = []
     }
 
     assert(condition: boolean, msg = ""): asserts condition {
@@ -172,8 +173,8 @@ class Parser {
     }
 
     readQuestionMark(tok: QuestionMarkToken) {
-        this.assert(!this.selector.isOptional)
-        this.selector.isOptional = true;
+        this.assert(!this.lastSelector.isOptional)
+        this.lastSelector.isOptional = true;
     }
 
     readPeriod(tok: PeriodToken) {
@@ -191,8 +192,8 @@ class Parser {
 
     readOpenBracket(tok: OpenBracketToken) {
         const slice = this.readSlice();
-        const currentSelector = this.selector;
-        currentSelector.directives.push({directives: this.currentDirectivesGroup, sliceAtEnd: slice});
+        const currentSelector = this.lastSelector;
+        currentSelector.directives.push({directives: [...this.currentDirectivesGroup], sliceAtEnd: slice});
         this.currentDirectivesGroup = [];
     }
 
@@ -282,7 +283,8 @@ class Parser {
         return tok;
     }
 
-    get selector(): Selector {
+    get lastSelector(): Selector {
+        assert(this.selectors.length > 0);
         return this.selectors[this.selectors.length - 1];
     }
 

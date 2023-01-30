@@ -49,13 +49,22 @@ export function* search(pathNodeGenerator: Generator<PathNode>, selector: dsl.Se
 }
 
 export function findMatches(pathNode: PathNode, selector: dsl.Selector): TreeNode[] {
-    const match = matchNodeEntryBottomUp(pathNode, selector)
-    if (match !== null) {
-        return [match];
+    let matchContext = new MatchContext();
+    let matches: TreeNode[] = []
+    let bottomUpMatch = matchNodeEntryBottomUp(pathNode, selector, matchContext)
+    if (bottomUpMatch !== null) {
+        console.log('bottom up match')
+        matches = [bottomUpMatch]
     }
     else {
-        return matchNodeEntryTopDown(pathNode.node, selector)
+        matchContext = new MatchContext()
+        matches = matchNodeEntryTopDown(pathNode.node, selector, matchContext)
+        if (matches.length > 0) {
+            console.log('top down match')
+        }
     }
+    return matches;
+
 }
 
 export function* iterDirection(
@@ -290,8 +299,9 @@ function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: Matc
         const isLast = i === selector.directives.length - 1;
         if (!isLast || applyImplicitSliceAtEnd) {
             const slice = directivesGroup.sliceAtEnd
-            remainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
+            filteredRemainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
         }
+        remainingNodes = filteredRemainingNodes;
     }
     return remainingNodes;
 }
@@ -300,6 +310,9 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
     // dictionary.pair[]
     // dictionary.pair[2]
     // dictionary.pair.value
+    if (nodes.length === 1 && nodes[0].type === "function_definition") {
+        let foo = 1;
+    }
     const applyImplicitSliceAtEnd = true;
     let remainingNodes = testNodes(nodes, selector, matchContext, applyImplicitSliceAtEnd);
     let isMatch = remainingNodes.length > 0;
@@ -354,8 +367,7 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
 //     return addedOptionals.reverse()
 // }
 
-function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector): TreeNode[] {
-    const matchContext = new MatchContext();
+function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
     const matches = matchNodesTopDown([node], selector, matchContext)
     return matches;
     // if (matches.length > 0) {
@@ -367,8 +379,7 @@ function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector): TreeNode
     // }
     // return []
 }
-function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector,): TreeNode | null {
-    const matchContext = new MatchContext();
+function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
     const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector), matchContext)
     if (match !== null) {
         return match;
@@ -383,6 +394,9 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
     while (currSelector !== null && currNode !== null) {
         let parent = currNode.parent;
         let nodesToTest = parent === null ? [currNode.node] : parent.node.node.children;
+        if (node.node.type === "class") {
+            let f = 123;
+        }
         const matched = testNodes(nodesToTest, currSelector, matchContext, false);
         const currId = currNode.node.id;
         const isMatch = matched.some(x => x.id === currId);
@@ -551,7 +565,7 @@ export class PathNode {
 export class MatchContext {
 
     mark: TreeNode[] | null
-    rootMatchedSelector: dsl.Selector | null 
+    rootMatchedSelector: dsl.Selector | null
     skippedOptionalsCount: number
 
     constructor() {

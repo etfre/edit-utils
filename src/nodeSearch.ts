@@ -3,10 +3,10 @@ import * as ast from "./ast"
 import { NodeSearchContext, SearchContext, TreeNode } from "./types";
 import { mergeGenerators } from "./util";
 
-export function findNode(selection: vscode.Selection, source: vscode.Position, searchContext: NodeSearchContext): vscode.Range[] | null {
+export function findNode(selection: vscode.Selection, source: vscode.Position, searchContext: NodeSearchContext): vscode.Range[] {
     const path = ast.findNodePathToPosition(source, searchContext.root)
     if (path === null) {
-        return null;
+        return [];
     }
     const leaf = path.getLeaf();
     let pathNodeGeneratorFn: Generator<ast.PathNode>;
