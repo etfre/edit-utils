@@ -154,7 +154,7 @@ function createSearchContext(editor: vscode.TextEditor, target: Target, directio
     if ('selector' in target) {
         const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
         const root = tree.rootNode
-        ast.dump(root);
+        // ast.dump(root);
         const selector = dsl.parseInput(target.selector);
         const getEvery = target.getEvery ?? false;
         return {

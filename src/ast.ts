@@ -1,5 +1,5 @@
 import * as vscode from "vscode"
-import { Directive, isOptionalDirective} from "./directives";
+import { Directive, isOptionalDirective } from "./directives";
 import { yieldSubtypes } from "./nodeLoader";
 import * as dsl from "./parser"
 import { TreeNode } from "./types";
@@ -221,27 +221,15 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
 }
 
 
-function testNode(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext, testDirectives: boolean) {
+function testNodeType(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext) {
     const tokenType = selector.tokenType.type
-    if (tokenType === "name" && !testTokenName(node, selector.tokenType)) {
-        return false;
+    if (tokenType === "name") {
+        return testTokenName(node, selector.tokenType);
     }
-
-    if (tokenType === "choice" &&
-        !selector.tokenType.options.some(selectorOption => testTokenName(node, selectorOption))) {
-        return false;
+    if (tokenType === "choice") {
+        return selector.tokenType.options.some(selectorOption => testTokenName(node, selectorOption));
     }
-    // assert(tokenType === "wildcard")
-    // ignoring slices here - does it matter?
-    if (testDirectives) {
-        for (const directiveGroup of selector.directives) {
-            for (const directive of directiveGroup.directives) {
-                if (!directive.matchNode(node, matchContext)) {
-                    return false;
-                }
-            }
-        }
-    }
+    assert(tokenType === "wildcard")
     return true;
 }
 
@@ -270,21 +258,19 @@ function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
     // return 1;
 }
 
-function matchNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
-    // dictionary.pair[]
-    // dictionary.pair[2]
-    // dictionary.pair.value
+// When searching top down, last index is implicitly [0] b/c we take the first match
+function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext, applyImplicitSliceAtEnd: boolean) {
     let nextMax = getNextSliceMax(selector.directives[0].sliceAtEnd);
     let remainingNodes: TreeNode[] = [];
     for (let node of nodes) {
         if (remainingNodes.length >= nextMax.max) {
             break;
         }
-        if (testNode(node, selector, matchContext, false)) {
+        if (testNodeType(node, selector, matchContext)) {
             remainingNodes.push(node)
         }
     }
-    for (const directivesGroup of selector.directives) {
+    for (const [i, directivesGroup] of selector.directives.entries()) {
         let filteredRemainingNodes: TreeNode[] = [];
         for (const node of remainingNodes) {
             if (remainingNodes.length >= nextMax.max) {
@@ -301,70 +287,85 @@ function matchNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: Mat
                 filteredRemainingNodes.push(node);
             }
         }
-        const slice = directivesGroup.sliceAtEnd
-        remainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
+        const isLast = i === selector.directives.length - 1;
+        if (!isLast || applyImplicitSliceAtEnd) {
+            const slice = directivesGroup.sliceAtEnd
+            remainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
+        }
     }
+    return remainingNodes;
+}
 
+function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
+    // dictionary.pair[]
+    // dictionary.pair[2]
+    // dictionary.pair.value
+    const applyImplicitSliceAtEnd = true;
+    let remainingNodes = testNodes(nodes, selector, matchContext, applyImplicitSliceAtEnd);
     let isMatch = remainingNodes.length > 0;
     const childSelector = selector.child
     const isSelectorLeaf = childSelector === null
     if (isMatch) {
+        if (matchContext.rootMatchedSelector === null) {
+            matchContext.rootMatchedSelector = selector;
+        }
         if (isSelectorLeaf) {
             return remainingNodes;
         }
         else {
             let subMatches: TreeNode[] = []
             for (const matchedNode of remainingNodes) {
-                subMatches = subMatches.concat(matchNodes(matchedNode.children, childSelector, matchContext));
+                subMatches = subMatches.concat(matchNodesTopDown(matchedNode.children, childSelector, matchContext));
             }
             remainingNodes = subMatches;
         }
     }
     if (selector.isOptional && !isSelectorLeaf && remainingNodes.length === 0) {
-        return matchNodes(nodes, childSelector, matchContext);
+        return matchNodesTopDown(nodes, childSelector, matchContext);
     }
     return remainingNodes;
 }
 
 
-function traverseUpOptionals(match: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
-    let currSelector = selector;
-    let optionalsBeforeMatch = 0;
-    while (currSelector.isOptional && !testNode(match, currSelector, matchContext, true)) {
-        optionalsBeforeMatch++
-        currSelector = currSelector.child as dsl.Selector
-    }
-    // only add optional matches at start if matched depth is one, e.g. decorated_function?.function_definition
-    // but not decorated_function?.function_definition.name
-    let addedOptionals: TreeNode[] = []
-    if (currSelector.child === null) {
-        let parentTestNode = match.parent;
-        let parentTestSelector = currSelector.parent as dsl.Selector
-        for (let i = 0; i < optionalsBeforeMatch; i++) {
-            if (parentTestNode === null) {
-                break
-            }
-            if (testNode(parentTestNode, parentTestSelector, matchContext, true)) {
-                addedOptionals.push(parentTestNode)
-                parentTestNode = parentTestNode;
-                parentTestSelector = parentTestSelector.parent as dsl.Selector
-            }
-        }
-    }
-    return addedOptionals.reverse()
-}
+// function traverseUpOptionals(match: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
+//     let currSelector = selector;
+//     let optionalsBeforeMatch = 0;
+//     while (currSelector.isOptional && !testNodeType(match, currSelector, matchContext, true)) {
+//         optionalsBeforeMatch++
+//         currSelector = currSelector.child as dsl.Selector
+//     }
+//     // only add optional matches at start if matched depth is one, e.g. decorated_function?.function_definition
+//     // but not decorated_function?.function_definition.name
+//     let addedOptionals: TreeNode[] = []
+//     if (currSelector.child === null) {
+//         let parentTestNode = match.parent;
+//         let parentTestSelector = currSelector.parent as dsl.Selector
+//         for (let i = 0; i < optionalsBeforeMatch; i++) {
+//             if (parentTestNode === null) {
+//                 break
+//             }
+//             if (testNodeType(parentTestNode, parentTestSelector, matchContext, true)) {
+//                 addedOptionals.push(parentTestNode)
+//                 parentTestNode = parentTestNode;
+//                 parentTestSelector = parentTestSelector.parent as dsl.Selector
+//             }
+//         }
+//     }
+//     return addedOptionals.reverse()
+// }
 
 function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector): TreeNode[] {
     const matchContext = new MatchContext();
-    const matches = matchNodes([node], selector, matchContext)
-    if (matches.length > 0) {
-        const formattedMatches = matches.map(match => {
-            const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector, matchContext);
-            return addedOptionals.length === 0 ? match : addedOptionals[0]
-        })
-        return formattedMatches
-    }
-    return []
+    const matches = matchNodesTopDown([node], selector, matchContext)
+    return matches;
+    // if (matches.length > 0) {
+    //     const formattedMatches = matches.map(match => {
+    //         const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector, matchContext);
+    //         return addedOptionals.length === 0 ? match : addedOptionals[0]
+    //     })
+    //     return formattedMatches
+    // }
+    // return []
 }
 function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector,): TreeNode | null {
     const matchContext = new MatchContext();
@@ -380,11 +381,12 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
     let currSelector: dsl.Selector | null = leafSelector;
     let firstMatch: TreeNode | null = null;
     while (currSelector !== null && currNode !== null) {
-        // traversing up we're testing one particular node so any multiple selector doesn't match
-        if (dsl.isMultiple(currSelector)) {
-            return null;
-        }
-        if (testNode(currNode.node, currSelector, matchContext, true)) {
+        let parent = currNode.parent;
+        let nodesToTest = parent === null ? [currNode.node] : parent.node.node.children;
+        const matched = testNodes(nodesToTest, currSelector, matchContext, false);
+        const currId = currNode.node.id;
+        const isMatch = matched.some(x => x.id === currId);
+        if (isMatch) {
             if (firstMatch === null) {
                 firstMatch = currNode.node;
             }
@@ -547,10 +549,14 @@ export class PathNode {
 }
 
 export class MatchContext {
+
     mark: TreeNode[] | null
+    rootMatchedSelector: dsl.Selector | null 
     skippedOptionalsCount: number
+
     constructor() {
         this.mark = null;
+        this.rootMatchedSelector = null;
         this.skippedOptionalsCount = 0;
     }
 }

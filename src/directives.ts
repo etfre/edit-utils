@@ -3,6 +3,7 @@ import { TreeNode } from "./types";
 import { assert } from "./util";
 
 
+
 export interface Directive {
     matchNode(node: TreeNode, matchContext: MatchContext): boolean
     matchNodes?: never
@@ -43,3 +44,9 @@ export class isOptionalDirective implements Directive {
 // export function isSingleDirective(directive: Directive): directive is Directive {
 //     return "matchNode" in directive;
 // }
+
+export const mapNameToDirective = {
+    isNamed: isNamedDirective,
+    name: NameDirective,
+    mark: MarkDirective,
+}

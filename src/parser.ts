@@ -1,6 +1,6 @@
-import { Directive, isOptionalDirective, } from "./directives"
+import { Directive, isOptionalDirective, mapNameToDirective, } from "./directives"
 import { Lexer } from "./lexer"
-import { AsteriskToken, NameToken, OpenBracketToken, OpenParenToken, PeriodToken, Token, TokenOptions, TokenType } from "./types"
+import { AsteriskToken, AtSignToken, NameToken, OpenBracketToken, OpenParenToken, PeriodToken, QuestionMarkToken, Token, TokenOptions, TokenType } from "./types"
 import { assert, assertIsDefined, assertIsNullish, isNullish } from "./util"
 
 export type Selector = {
@@ -14,6 +14,7 @@ export type Selector = {
     // slice: Slice | null
     isMark: boolean
     directives: { directives: Directive[], sliceAtEnd: Slice }[]
+    isLastSliceImplicit: boolean
 }
 
 export type Name = {
@@ -30,32 +31,10 @@ export type Choice = {
     options: (Name)[]
 }
 
-type SliceOrIndexState = null | { stage: "index", num?: number } | { isFilter: boolean, stage: "start" | "stop" | "step", slice: Slice }
-
-
 export type Slice = {
     start: number
     stop: number | null
     step: number
-}
-
-type ParseState = {
-    tokenType: null | Name | Wildcard | (Choice & { isDone: boolean, readyForOption: boolean })
-    isOptional: boolean
-    index: number | null
-    slice: Slice | null
-    filter: Slice | null
-    sliceOrIndexState: SliceOrIndexState
-}
-
-function defaultParseStates(): ParseState {
-    const tokenType = null
-    const isOptional = false
-    const index = null
-    const slice = null
-    const filter = null
-    const sliceOrIndexState = null;
-    return { tokenType, isOptional, index, slice, filter, sliceOrIndexState }
 }
 
 function sliceFromIndex(index: number): Slice {
@@ -63,49 +42,6 @@ function sliceFromIndex(index: number): Slice {
     return { start: index, stop, step: 1 }
 }
 
-function selectorFromParseState(
-    parseTokenType: ParseState['tokenType'],
-    isOptional: ParseState['isOptional'],
-    index: ParseState['index'],
-    sliceState: ParseState['slice'],
-    filterState: ParseState['filter'],
-): Selector {
-    if (parseTokenType === null) {
-        throw new Error("");
-    }
-
-    const tokenType: Selector['tokenType'] = parseTokenType.type === "choice" ?
-        { options: parseTokenType.options, type: "choice" } :
-        { ...parseTokenType };
-    let directivesGroup: Directive[] = []
-    const directives: { directives: Directive[], sliceAtEnd: Slice }[] = [];
-    // if (isOptional) {
-    //     directivesGroup.push(new isOptionalDirective());
-    // }
-    if (sliceState !== null) {
-        directives.push({ directives: directivesGroup, sliceAtEnd: { ...sliceState } });
-        directivesGroup = []
-    }
-    // if (filterState !== null) {
-    //     directives.push(new FilterDirective(filterState.start, filterState.stop, filterState.step));
-    // }
-    if (index !== null) {
-        directives.push({ directives: directivesGroup, sliceAtEnd: sliceFromIndex(index) });
-        directivesGroup = []
-    }
-    directives.push({ directives: directivesGroup, sliceAtEnd: { start: 0, stop: 1, step: 1 } })
-    const selector: Selector = {
-        type: "Selector",
-        tokenType: tokenType,
-        isOptional,
-        isMark: false,
-        directives,
-        parent: null,
-        child: null
-    }
-
-    return selector
-}
 
 function linkSelectors(parent: Selector, child: Selector) {
     parent.child = child
@@ -133,8 +69,11 @@ class Parser {
         this.currentDirectivesGroup = []
         this.parseMap = {
             ASTERISK: this.readAsterisk,
+            AT_SIGN: this.readAtSign,
             NAME: this.readName,
+            OPEN_BRACKET: this.readOpenBracket,
             OPEN_PAREN: this.readOpenParen,
+            QUESTION_MARK: this.readQuestionMark,
             PERIOD: this.readPeriod,
         } as any
     }
@@ -146,16 +85,15 @@ class Parser {
             assert(this.pos > startPos);
         }
         assert(this.selectors.length > 0);
+        this.finalizeLeafSelector();
         for (const [i, selector] of this.selectors.slice(0, -1).entries()) {
             const child = this.selectors[i + 1];
-            selector.child = child;
-            child.parent = selector;
+            linkSelectors(selector, child);
         }
         return this.selectors[0];
     }
 
     readNext(): void {
-        let startPos = this.pos;
         const tok = this.peek();
         if (tok.type in this.parseMap) {
             this.advance();
@@ -168,6 +106,14 @@ class Parser {
         }
     }
 
+    finalizeLeafSelector() {
+        const leafSelector = this.selector;
+        if (this.currentDirectivesGroup.length > 0 || leafSelector.directives.length === 0) {
+            leafSelector.directives.push({directives: this.currentDirectivesGroup, sliceAtEnd: {start: 0, stop: 1, step: 1}});
+            leafSelector.isLastSliceImplicit = true;
+        }
+    }
+
     assert(condition: boolean, msg = ""): asserts condition {
         if (!condition) {
             throw new ParseError(msg);
@@ -175,7 +121,7 @@ class Parser {
     }
 
     addSelector(selectorFields: Partial<Selector> & { tokenType: Selector['tokenType'] }) {
-        this.assert(this.readyForNewSelector);
+        this.assert(this.readyForNewSelector && this.currentDirectivesGroup.length === 0);
         const defaultSelectorFields = {
             type: "Selector",
             isOptional: false,
@@ -183,6 +129,7 @@ class Parser {
             child: null,
             isMark: false,
             directives: [],
+            isLastSliceImplicit: false
         }
         //@ts-ignore
         const selector: Selector = { ...defaultSelectorFields, ...selectorFields }
@@ -190,6 +137,50 @@ class Parser {
         this.readyForNewSelector = false;
     }
 
+    readAtSign(tok: AtSignToken) {
+        const directive = this.readDirective();
+        this.currentDirectivesGroup.push(directive);
+    }
+
+    readDirective(): Directive {
+        const name = this.require("NAME").value;
+        assert(name in mapNameToDirective)
+        const directiveCls = mapNameToDirective[name as keyof typeof mapNameToDirective]
+        if (this.isAtEnd() || !this.match(this.peek(), "OPEN_PAREN")) {
+            //@ts-ignore
+            return new directiveCls();
+        }
+        this.advance();
+        let readyForArg = true;
+        const args: (string | number)[] = []
+        while (true) {
+            const tok = this.require("NAME", "NUMBER", "COMMA", "CLOSED_PAREN");
+            if (tok.type === "CLOSED_PAREN") {
+                break;
+            }
+            else if (tok.type === "COMMA") {
+                assert(!readyForArg);
+                readyForArg = true;
+            }
+            else {
+                assert(readyForArg);
+                args.push(tok.value);
+            }
+        }
+        //@ts-ignore
+        return new directiveCls(...args);
+    }
+
+    readQuestionMark(tok: QuestionMarkToken) {
+        this.assert(!this.selector.isOptional)
+        this.selector.isOptional = true;
+    }
+
+    readPeriod(tok: PeriodToken) {
+        this.assert(!this.readyForNewSelector)
+        this.finalizeLeafSelector();
+        this.readyForNewSelector = true;
+    }
     readAsterisk(tok: AsteriskToken) {
         this.addSelector({ tokenType: { type: "wildcard" } });
     }
@@ -199,42 +190,65 @@ class Parser {
     }
 
     readOpenBracket(tok: OpenBracketToken) {
-        this.assert(!this.readyForNewSelector)
+        const slice = this.readSlice();
         const currentSelector = this.selector;
-        const nextTok = this.require("NUMBER", "COLON", "CLOSED_BRACKET");
-        if (nextTok.type === "CLOSED_BRACKET") {
+        currentSelector.directives.push({directives: this.currentDirectivesGroup, sliceAtEnd: slice});
+        this.currentDirectivesGroup = [];
+    }
+
+    readSlice(): Slice {
+        this.assert(!this.readyForNewSelector)
+        let stages = ["start", "stop", "step"] as const;
+        let stageIdx = 0;
+        let colonRequired = false;
+        let slice: Slice = defaultSlice();
+        if (this.match(this.peek(), "CLOSED_BRACKET")) { // []
+            return slice;
+        } 
+        while (stageIdx < stages.length) {
+            const stage = stages[stageIdx];
+            const nextTok = this.require("NUMBER", "COLON", "CLOSED_BRACKET");
+            if (nextTok.type === "CLOSED_BRACKET") {
+                return stage === "start" ? sliceFromIndex(slice.start) : slice;
+            }
+            if (nextTok.type === "NUMBER") {
+                this.assert(!colonRequired);
+                slice[stage] = nextTok.value;
+                colonRequired = true;
+                if (stage === "step") {
+                    break;
+                }
+            }
+            else {
+                colonRequired = false;
+                stageIdx++;
+            }
 
         }
+        this.require("CLOSED_BRACKET");
+        return slice;
     }
+
 
     readOpenParen(tok: OpenParenToken) {
         // parse as Choice, handle directive in separate fn
         let readyForOption = true;
         let options: Choice['options'] = []
         while (true) {
-            let nextTok = this.peek();
-            if (this.match(nextTok, "CLOSED_PAREN")) {
+            let nextTok = this.require("CLOSED_PAREN", "NAME", "PIPE");
+            if (nextTok.type === "CLOSED_PAREN") {
                 this.addSelector({ tokenType: { type: "choice", options } });
                 return;
             }
-            else if (this.match(nextTok, "NAME")) {
+            else if (nextTok.type === "NAME") {
                 this.assert(readyForOption);
                 options.push({ type: "name", value: nextTok.value });
                 readyForOption = false;
             }
-            else if (this.match(tok, "PIPE")) {
+            else if (nextTok.type === "PIPE") {
                 readyForOption = true;
             }
-            else {
-                throw new Error("")
-            }
-            this.advance();
         }
-    }
-
-    readPeriod(tok: PeriodToken) {
-        this.assert(!this.readyForNewSelector);
-        this.readyForNewSelector = true;
     }
 
     match<T extends TokenType>(tok: Token, ...types: T[]): tok is TokenOptions<T> {
@@ -245,16 +259,15 @@ class Parser {
         }
         return false;
     }
-    // match<T extends Token, V extends Token['type']>(tok: T, ...types: Token['type'][]) {
-    //     return types.includes(tok.type);
-    // }
 
-    expect<T extends TokenType>(...types: TokenType[]) {
+    expect<T extends TokenType>(...types: T[]): TokenOptions<T> {
         const tok = this.peek();
+        //@ts-ignore
         if (!types.includes(tok.type)) {
             throw new NoMatch("");
         }
         this.advance();
+        //@ts-ignore
         return tok;
     }
 
@@ -270,7 +283,7 @@ class Parser {
     }
 
     get selector(): Selector {
-        return this.selectors[this.pos];
+        return this.selectors[this.selectors.length - 1];
     }
 
     *readIter() {
@@ -306,196 +319,9 @@ class Parser {
 }
 
 export function parseInput(input: string): Selector {
+    console.log(input);
     const tokens = new Lexer(input).tokenize();
     return new Parser(tokens).parse();
-    // let { tokenType, isOptional, index, slice, filter, sliceOrIndexState } = defaultParseStates()
-
-    // let root: Selector | null = null
-    // let curr: Selector | null = null
-    // for (let [i, token] of tokens.entries()) {
-    //     const nextToken: Token | undefined = tokens[i + 1];
-    //     switch (token.type) {
-    //         case "QUESTION_MARK": {
-    //             assert(nextToken?.type === "PERIOD", `? must precede . or end of string, not ${nextToken}`)
-    //             assert(isOptional === false, "Expecting isOptional to be false")
-    //             assert(sliceOrIndexState === null)
-    //             isOptional = true;
-    //             break;
-    //         }
-    //         case "ASTERISK": {
-    //             assert(sliceOrIndexState === null)
-    //             assert(tokenType === null);
-    //             tokenType = { type: "wildcard" }
-    //             break;
-    //         }
-    //         case "CLOSED_BRACKET": {
-    //             assertIsDefined(sliceOrIndexState)
-    //             if (sliceOrIndexState.stage === "index") {
-    //                 const num = sliceOrIndexState.num
-    //                 if (num === undefined) {
-    //                     assert(slice === null);
-    //                     slice = defaultSlice();
-    //                 }
-    //                 else {
-    //                     assert(index === null);
-    //                     index = num;
-    //                 }
-    //             }
-    //             else {
-    //                 assert(!sliceOrIndexState.isFilter)
-    //                 slice = sliceOrIndexState.slice;
-    //             }
-    //             sliceOrIndexState = null;
-    //             break;
-    //         }
-    //         case "CLOSED_CURLY_BRACE": {
-    //             assertIsDefined(sliceOrIndexState);
-    //             if (sliceOrIndexState.stage === "stop" || sliceOrIndexState.stage === "step") {
-    //                 assert(sliceOrIndexState.isFilter)
-    //                 assertIsNullish(filter)
-    //                 filter = sliceOrIndexState.slice;
-    //             }
-    //             break;
-    //         }
-    //         case "CLOSED_PAREN": {
-    //             assert(tokenType?.type === "choice" && !tokenType.isDone)
-    //             tokenType.isDone = true;
-    //             break;
-    //         }
-    //         case "COLON": {
-    //             assertIsDefined(sliceOrIndexState);
-    //             if (sliceOrIndexState.stage === "index") {
-    //                 const start = sliceOrIndexState.num ?? 0;
-    //                 const slice = { ...defaultSlice(), start }
-    //                 sliceOrIndexState = { stage: "stop", slice, isFilter: false }
-    //             }
-    //             else if (sliceOrIndexState.stage === "start") {
-    //                 sliceOrIndexState = { ...sliceOrIndexState, stage: "stop" }
-    //             }
-    //             else {
-    //                 assert(sliceOrIndexState.stage === "stop")
-    //                 sliceOrIndexState = { ...sliceOrIndexState, stage: "step" }
-    //             }
-    //             break;
-    //         }
-    //         case "NAME": {
-    //             if (tokenType === null) {
-    //                 tokenType = { type: "name", value: token.value }
-    //             }
-    //             else if (tokenType.type === "choice") {
-    //                 assert(tokenType.readyForOption)
-    //                 tokenType.options.push({ type: "name", value: token.value })
-    //                 tokenType.readyForOption = false;
-    //             }
-    //             else {
-    //                 throw new Error("Name requires null or choice tokenType")
-    //             }
-    //             break;
-    //         }
-    //         case "NUMBER": {
-    //             assertIsDefined(sliceOrIndexState)
-    //             if (sliceOrIndexState.stage === "index") {
-    //                 sliceOrIndexState.num = token.value;
-    //             }
-    //             else if (sliceOrIndexState.stage === "start") {
-    //                 sliceOrIndexState.slice.start = token.value
-    //             }
-    //             else if (sliceOrIndexState.stage === "stop") {
-    //                 sliceOrIndexState.slice.stop = token.value
-    //             }
-    //             else if (sliceOrIndexState.stage === "step") {
-    //                 sliceOrIndexState.slice.step = token.value
-    //             }
-    //             break;
-    //         }
-    //         case "OPEN_BRACKET": {
-    //             assert(tokenType !== null, "Must have a name for index or slice")
-    //             assert(index === null, "Index must be null")
-    //             sliceOrIndexState = { stage: "index" }
-    //             break;
-    //         }
-    //         case "OPEN_CURLY_BRACE": {
-    //             sliceOrIndexState = { isFilter: true, stage: "start", slice: defaultSlice() }
-    //             break;
-    //         }
-    //         case "OPEN_PAREN": {
-    //             assert(tokenType === null)
-    //             tokenType = { type: "choice", readyForOption: true, options: [], isDone: false }
-    //             break;
-    //         }
-    //         case "PERIOD": {
-    //             const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter);
-    //             if (curr !== null) {
-    //                 linkSelectors(curr, newSelector)
-    //             }
-    //             if (root === null) {
-    //                 root = newSelector
-    //             }
-    //             curr = newSelector
-    //             const newDefault = defaultParseStates()
-    //             tokenType = newDefault.tokenType
-    //             isOptional = newDefault.isOptional
-    //             index = newDefault.index
-    //             slice = newDefault.slice
-    //             filter = newDefault.filter
-    //             sliceOrIndexState = newDefault.sliceOrIndexState
-    //             break;
-    //         }
-    //         case "PIPE": {
-    //             assert(tokenType?.type === "choice" && !tokenType.isDone)
-    //             tokenType.readyForOption = true;
-    //             break;
-    //         }
-    //         case "AT_SIGN": {
-    //             break;
-    //         }
-    //         case "COMMA": {
-    //             break;
-    //         }
-    //         case "NOT": {
-    //             break;
-    //         }
-    //         default: {
-    //             const exhaustiveCheck: never = token;
-    //             throw new Error(`Unexpected token ${exhaustiveCheck}`)
-    //         }
-    //     }
-    // }
-    // if (tokenType !== null) {
-    //     const newSelector = selectorFromParseState(tokenType, isOptional, index, slice, filter);
-    //     if (curr !== null) {
-    //         linkSelectors(curr, newSelector)
-    //     }
-    //     if (root === null) {
-    //         root = newSelector
-    //     }
-    //     curr = newSelector
-    // }
-    // if (root === null) {
-    //     throw new Error("No Selector successfully parsed")
-    // }
-    // // simpler if root is always a single node
-    // // if (isMultiple(root)) {
-    // //     const newRoot: Selector = {
-    // //         type: "Selector",
-    // //         isOptional: false,
-    // //         tokenType: { type: "wildcard" },
-    // //         child: root,
-    // //         parent: null,
-    // //         index: null,
-    // //         filter: null,
-    // //         slice: null,
-    // //         directives: [],
-    // //     }
-    // //     root = newRoot
-    // // }
-    // return root
-}
-
-export function isMultiple(selector: Selector) {
-    // very crude and will produce false positives b/c it doesn't handle slices intelligently, fix later
-    const lastSlice = selector.directives[selector.directives.length - 1].sliceAtEnd
-    return selector.directives.length > 1 || !(lastSlice.start === 0 && lastSlice.stop === 1 && lastSlice.step === 1)
 }
 
 export function getLeafSelector(selector: Selector): Selector {

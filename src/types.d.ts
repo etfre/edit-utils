@@ -84,6 +84,7 @@ type TreeNode = {
     children: Array<TreeNode>
     endIndex: number
     endPosition: { row: number, column: number }
+    id: number
     isNamed: () => boolean
     parent: TreeNode | null
     startIndex: number
