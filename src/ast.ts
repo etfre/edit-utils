@@ -39,19 +39,19 @@ export function* pathsChildrenFirst(
 }
 
 
-export function* search(pathNodeGenerator: Generator<PathNode>, selector: dsl.Selector): Generator<TreeNode[]> {
+export function* search(pathNodeGenerator: Generator<PathNode>, selector: dsl.Selector, greedy: boolean): Generator<TreeNode[]> {
     for (let pathNode of pathNodeGenerator) {
-        const matches = findMatches(pathNode, selector);
+        const matches = findMatches(pathNode, selector, greedy);
         if (matches.length > 0) {
             yield matches;
         }
     }
 }
 
-export function findMatches(pathNode: PathNode, selector: dsl.Selector): TreeNode[] {
+export function findMatches(pathNode: PathNode, selector: dsl.Selector, greedy: boolean = false): TreeNode[] {
     let matchContext = new MatchContext();
     let matches: TreeNode[] = []
-    let bottomUpMatch = matchNodeEntryBottomUp(pathNode, selector, matchContext)
+    let bottomUpMatch = matchNodeEntryBottomUp(pathNode.node, selector, matchContext)
     if (bottomUpMatch !== null) {
         console.log('bottom up match')
         matches = [bottomUpMatch]
@@ -62,6 +62,39 @@ export function findMatches(pathNode: PathNode, selector: dsl.Selector): TreeNod
         if (matches.length > 0) {
             console.log('top down match')
         }
+    }
+    const rootMatch = matchContext.rootMatch;
+    if (rootMatch !== null) {
+        matches = matches.map(match => {
+            const highestMatchedOptional = traverseUpOptionals(match, rootMatch, matchContext);
+            return highestMatchedOptional;
+        })
+    }
+    if (greedy) {
+        const greedyMatches: TreeNode[] = [];
+        // searching upwards so discard a match if we've already got a common ancestor
+        const seenIds = new Set<number>();
+        for (const match of matches) {
+            let greedyMatch: TreeNode | null = match;
+            let matchResult: TreeNode | null = match;
+            let curr = match.parent;
+            while (curr) {
+                matchResult = matchNodeEntryBottomUp(curr, selector, matchContext);
+                if (matchResult) {
+                    if (seenIds.has(matchResult.id)) {
+                        greedyMatch = null;
+                        break;
+                    }
+                    greedyMatch = matchResult;
+                    seenIds.add(matchResult.id);
+                }
+                curr = curr.parent;
+            }
+            if (greedyMatch) {
+                greedyMatches.push(greedyMatch)
+            }
+        }
+        matches = greedyMatches;
     }
     return matches;
 
@@ -169,10 +202,6 @@ export function findNodePathToPosition(position: vscode.Position, node: TreeNode
                 path.setChild(childResult, childIdx);
             }
         }
-        // this indicates we have a non-leaf node but none of the children contain the position
-        // else if (allowApproximateMatch) {
-        //     path.setChild(new PathNode(childNode), childIdx);
-        // }
     }
     return path;
 }
@@ -211,13 +240,11 @@ function findClosestChildIndex(position: vscode.Position, children: TreeNode[], 
             const adjacentNode = children[adjacentIdx];
             // tiebreaker if we don't have an exact match: default to a named node
             // if possible, otherwise the closest
-            if (child.isNamed() && !adjacentNode.isNamed()) {
-                return mid;
+            const bothNamedOrUnnamed = child.isNamed() === adjacentNode.isNamed()
+            if (bothNamedOrUnnamed) {
+                return getClosest(position, midPos, adjacantPos) <= 0 ? mid : adjacentIdx;
             }
-            else if (adjacentNode.isNamed() && !child.isNamed()) {
-                return adjacentIdx;
-            }
-            return getClosest(position, midPos, adjacantPos) <= 0 ? mid : adjacentIdx
+            return child.isNamed() ? mid : adjacentIdx;
         }
         if (cmp === -1) {
             return findClosestChildIndex(position, children, low, mid - 1);
@@ -253,7 +280,19 @@ function testTokenName(node: TreeNode, tokenType: dsl.Name) {
 }
 
 function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
-    return { max: Infinity, reverse: false }
+    let reverse = false;
+    let max = Infinity;
+    const [start, stop] = [slice.start, slice.stop];
+    if (stop !== null && stop > 0) { // example: [:6] we only need to scan for the first 6 elements
+        max = stop;
+    }
+    else if (start !== null && start < 0) { // example: [-5:] we only need to scan for the last 5 elements
+        // not implemented yet because reverse needs to be handled in testNodes in several locations. YAGNI?
+        // max = start;
+        // reverse = true;
+    }
+
+    return { max, reverse }
     // if (slice.stop !== null && slice.stop >= 0) {
     //     return 
     // }
@@ -269,7 +308,9 @@ function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
 
 // When searching top down, last index is implicitly [0] b/c we take the first match
 function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext, applyImplicitSliceAtEnd: boolean) {
-    let nextMax = getNextSliceMax(selector.directives[0].sliceAtEnd);
+    let nextMax = selector.directives.length === 1 && selector.isLastSliceImplicit ?
+        { max: Infinity, reverse: false } :
+        getNextSliceMax(selector.directives[0].sliceAtEnd);
     let remainingNodes: TreeNode[] = [];
     for (let node of nodes) {
         if (remainingNodes.length >= nextMax.max) {
@@ -281,8 +322,10 @@ function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: Matc
     }
     for (const [i, directivesGroup] of selector.directives.entries()) {
         let filteredRemainingNodes: TreeNode[] = [];
+        const isLast = i === selector.directives.length - 1;
+        const applySlice = !isLast || applyImplicitSliceAtEnd;
         for (const node of remainingNodes) {
-            if (remainingNodes.length >= nextMax.max) {
+            if (applySlice && remainingNodes.length >= nextMax.max) {
                 break;
             }
             let nodeMatches = true;
@@ -296,8 +339,7 @@ function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: Matc
                 filteredRemainingNodes.push(node);
             }
         }
-        const isLast = i === selector.directives.length - 1;
-        if (!isLast || applyImplicitSliceAtEnd) {
+        if (applySlice) {
             const slice = directivesGroup.sliceAtEnd
             filteredRemainingNodes = sliceArray(filteredRemainingNodes, slice.start, slice.stop, slice.step);
         }
@@ -310,17 +352,17 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
     // dictionary.pair[]
     // dictionary.pair[2]
     // dictionary.pair.value
-    if (nodes.length === 1 && nodes[0].type === "function_definition") {
-        let foo = 1;
-    }
     const applyImplicitSliceAtEnd = true;
     let remainingNodes = testNodes(nodes, selector, matchContext, applyImplicitSliceAtEnd);
-    let isMatch = remainingNodes.length > 0;
+    const isMatch = remainingNodes.length > 0;
     const childSelector = selector.child
     const isSelectorLeaf = childSelector === null
     if (isMatch) {
-        if (matchContext.rootMatchedSelector === null) {
-            matchContext.rootMatchedSelector = selector;
+        if (matchContext.rootMatch === null) {
+            matchContext.rootMatch = selector;
+        }
+        else {
+            matchContext.rootMatch = null
         }
         if (isSelectorLeaf) {
             return remainingNodes;
@@ -340,46 +382,27 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
 }
 
 
-// function traverseUpOptionals(match: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
-//     let currSelector = selector;
-//     let optionalsBeforeMatch = 0;
-//     while (currSelector.isOptional && !testNodeType(match, currSelector, matchContext, true)) {
-//         optionalsBeforeMatch++
-//         currSelector = currSelector.child as dsl.Selector
-//     }
-//     // only add optional matches at start if matched depth is one, e.g. decorated_function?.function_definition
-//     // but not decorated_function?.function_definition.name
-//     let addedOptionals: TreeNode[] = []
-//     if (currSelector.child === null) {
-//         let parentTestNode = match.parent;
-//         let parentTestSelector = currSelector.parent as dsl.Selector
-//         for (let i = 0; i < optionalsBeforeMatch; i++) {
-//             if (parentTestNode === null) {
-//                 break
-//             }
-//             if (testNodeType(parentTestNode, parentTestSelector, matchContext, true)) {
-//                 addedOptionals.push(parentTestNode)
-//                 parentTestNode = parentTestNode;
-//                 parentTestSelector = parentTestSelector.parent as dsl.Selector
-//             }
-//         }
-//     }
-//     return addedOptionals.reverse()
-// }
+function traverseUpOptionals(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode {
+    let highestMatch = node;
+    let currNode = node.parent;
+    let currSelector = selector.parent;
+    while (currNode !== null && currSelector !== null) {
+        if (!testNode(currNode, currSelector, matchContext)) {
+            break;
+        }
+        highestMatch = currNode;
+        currNode = currNode.parent;
+        currSelector = selector.parent;
+    }
+    return highestMatch
+}
 
 function matchNodeEntryTopDown(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode[] {
     const matches = matchNodesTopDown([node], selector, matchContext)
     return matches;
-    // if (matches.length > 0) {
-    //     const formattedMatches = matches.map(match => {
-    //         const addedOptionals = traverseUpOptionals(match, selector as dsl.Selector, matchContext);
-    //         return addedOptionals.length === 0 ? match : addedOptionals[0]
-    //     })
-    //     return formattedMatches
-    // }
-    // return []
 }
-function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
+
+function matchNodeEntryBottomUp(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
     const match = matchNodeEntryBottomUpHelper(node, dsl.getLeafSelector(selector), matchContext)
     if (match !== null) {
         return match;
@@ -387,29 +410,31 @@ function matchNodeEntryBottomUp(node: PathNode, selector: dsl.Selector, matchCon
     return null;
 }
 
-function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
-    let currNode: PathNode | null = node;
+function matchNodeEntryBottomUpHelper(node: TreeNode, leafSelector: dsl.Selector, matchContext: MatchContext): TreeNode | null {
+    let currNode: TreeNode | null = node;
     let currSelector: dsl.Selector | null = leafSelector;
     let firstMatch: TreeNode | null = null;
     while (currSelector !== null && currNode !== null) {
         let parent = currNode.parent;
-        let nodesToTest = parent === null ? [currNode.node] : parent.node.node.children;
+        let nodesToTest = parent === null ? [currNode] : parent.children;
         const matched = testNodes(nodesToTest, currSelector, matchContext, false);
-        const currId = currNode.node.id;
+        const currId = currNode.id;
         const isMatch = currSelector.isLastSliceImplicit ? // distinguish between *[6] and *
             matched.some(x => x.id === currId) :
             matched.length === 1 && matched[0].id === currId;
         if (isMatch) {
             if (firstMatch === null) {
-                firstMatch = currNode.node;
+                firstMatch = currNode;
+                matchContext.rootMatch = currSelector
             }
             currSelector = currSelector.parent;
-            currNode = currNode.parent === null ? null : currNode.parent.node;
+            currNode = currNode.parent === null ? null : currNode.parent;
         }
         else if (currSelector.isOptional) { // mismatch on an optional field, go to the parent selector
             currSelector = currSelector.parent;
         }
         else { // mismatch on a required field
+            matchContext.rootMatch = null;
             return null;
         }
     }
@@ -423,6 +448,14 @@ function matchNodeEntryBottomUpHelper(node: PathNode, leafSelector: dsl.Selector
         }
     }
     return firstMatch;
+}
+
+function testNode(node: TreeNode, selector: dsl.Selector, matchContext: MatchContext) {
+    const matched = testNodes([node], selector, matchContext, false);
+    const isMatch = selector.isLastSliceImplicit ? // distinguish between *[6] and *
+        matched.some(x => x.id === node.id) :
+        matched.length === 1 && matched[0].id === node.id;
+    return isMatch;
 }
 
 
@@ -573,12 +606,12 @@ export class PathNode {
 export class MatchContext {
 
     mark: TreeNode[] | null
-    rootMatchedSelector: dsl.Selector | null
+    rootMatch: dsl.Selector | null
     skippedOptionalsCount: number
 
     constructor() {
         this.mark = null;
-        this.rootMatchedSelector = null;
+        this.rootMatch = null;
         this.skippedOptionalsCount = 0;
     }
 }

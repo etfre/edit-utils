@@ -3,7 +3,11 @@ import * as ast from "./ast"
 import { NodeSearchContext, SearchContext, TreeNode } from "./types";
 import { mergeGenerators } from "./util";
 
-export function findNode(selection: vscode.Selection, source: vscode.Position, searchContext: NodeSearchContext): vscode.Range[] {
+export function findNode(
+    selection: vscode.Selection,
+     source: vscode.Position, 
+     searchContext: NodeSearchContext,
+     ): vscode.Range[] {
     const path = ast.findNodePathToPosition(source, searchContext.root)
     if (path === null) {
         return [];
@@ -23,7 +27,7 @@ export function findNode(selection: vscode.Selection, source: vscode.Position, s
         throw new Error("")
     }
     let ranges: vscode.Range[] = []
-    for (const matches of ast.search(pathNodeGeneratorFn, searchContext.selector)) {
+    for (const matches of ast.search(pathNodeGeneratorFn, searchContext.selector, searchContext.greedy)) {
         const filteredMatches = matches.filter(x => filterMatch(x, selection, searchContext.direction));
         if (filteredMatches.length > 0) {
             if (searchContext.getEvery) {

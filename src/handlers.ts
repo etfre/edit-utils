@@ -3,7 +3,7 @@ import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } fr
 import * as ast from "./ast"
 import * as dsl from "./parser"
 import { assert, mergeGenerators, unEscapeRegex } from './util';
-import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TreeNode } from './types';
+import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TextSearchContext, TextTarget, TreeNode } from './types';
 import { findNode } from './nodeSearch';
 
 
@@ -31,7 +31,9 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
     }
 }
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
-    const searchContext = createSearchContext(editor, params.target, params.direction);
+    const searchContext = isNodeTarget(params.target) ?
+        createNodeSearchContext(editor, params.target, params.direction) :
+        createTextSearchContext(params.target, params.direction);
     const side = params.target.side ?? null;
     const onDone = params.onDone ?? null;
     await doThing2(params.action, editor, searchContext, side, onDone);
@@ -148,30 +150,45 @@ function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelect
     return editor.document.getText(textRange);
 }
 
-function createSearchContext(editor: vscode.TextEditor, target: Target, direction: "backwards" | "forwards" | "smart"): SearchContext {
+function isNodeTarget(target: Target): target is NodeTarget {
+    return 'selector' in target
+}
+
+function createTextSearchContext(
+    target: TextTarget,
+    direction: "backwards" | "forwards" | "smart",
+): TextSearchContext {
     const count = target.count ?? 1;
     const side = target.side ?? null;
-    if ('selector' in target) {
-        const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
-        const root = tree.rootNode
-        // ast.dump(root);
-        const selector = dsl.parseInput(target.selector);
-        const getEvery = target.getEvery ?? false;
-        return {
-            type: "nodeSearchContext",
-            count,
-            root,
-            direction,
-            selector,
-            side,
-            getEvery,
-            resultInfo: {}
-        }
-    }
-    else {
-        const pattern = target.pattern;
-        assert(direction !== "smart")
-        return { type: "textSearchContext", direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
+    const pattern = target.pattern;
+    assert(direction !== "smart");
+    return { type: "textSearchContext", direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
+}
+
+
+function createNodeSearchContext(
+    editor: vscode.TextEditor,
+    target: NodeTarget,
+    direction: "backwards" | "forwards" | "smart",
+): NodeSearchContext {
+    const count = target.count ?? 1;
+    const side = target.side ?? null;
+    const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
+    const root = tree.rootNode
+    // ast.dump(root);
+    const selector = dsl.parseInput(target.selector);
+    const getEvery = target.getEvery ?? false;
+    const greedy = target.greedy ?? false;
+    return {
+        type: "nodeSearchContext",
+        count,
+        root,
+        direction,
+        selector,
+        side,
+        getEvery,
+        greedy,
+        resultInfo: {},
     }
 }
 
@@ -219,6 +236,7 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
 
 export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLineRequest['params']) {
     const line = params.line;
+    vscode.window.activeTextEditor?.visibleRanges[0]
     editor.selection = new vscode.Selection(line, 0, line, 0);
     await vscode.commands.executeCommand("cursorHome")
 }

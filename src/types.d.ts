@@ -86,7 +86,11 @@ type TreeNode = {
     endPosition: { row: number, column: number }
     id: number
     isNamed: () => boolean
+    nextNamedSibling: TreeNode | null
+    nextSibling: TreeNode | null
     parent: TreeNode | null
+    previousNamedSibling: TreeNode | null
+    previousSibling: TreeNode | null
     startIndex: number
     startPosition: { row: number, column: number }
     type: string
@@ -185,6 +189,7 @@ type NodeTarget = {
     getEvery?: boolean
     side?: "start" | "end"
     count?: number
+    greedy?: boolean
 }
 
 type TextTarget = {
@@ -231,6 +236,7 @@ type NodeSearchContext = {
     side: "start" | "end" | null
     getEvery: boolean
     resultInfo: { [key in string]: any }
+    greedy: boolean
 }
 
 type TextSearchContext = {

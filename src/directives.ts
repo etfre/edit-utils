@@ -2,14 +2,9 @@ import { MatchContext } from "./ast";
 import { TreeNode } from "./types";
 import { assert } from "./util";
 
-
-
 export interface Directive {
     matchNode(node: TreeNode, matchContext: MatchContext): boolean
-    matchNodes?: never
 }
-
-// export type Directive = SingleNodeDirective
 
 export class MarkDirective {
     matchNodes(nodes: TreeNode[], matchContext: MatchContext): TreeNode[] {
