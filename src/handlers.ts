@@ -30,8 +30,9 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
         }
     }
 }
+
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
-    const searchContext = isNodeTarget(params.target) ?
+    const searchContext = params.target.type === "nodeTarget" ?
         createNodeSearchContext(editor, params.target, params.direction) :
         createTextSearchContext(params.target, params.direction);
     const side = params.target.side ?? null;
@@ -63,8 +64,23 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
     await doThing2(params.action, editor, searchContext, null, onDone);
 }
 
+export async function handleSwapAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
+    const count = params.count ?? 1;
+    const firstTarget = params.left ?? BACKWARDS_SURROUND_CHARS;
+    const right = params.right ?? FORWARDS_SURROUND_CHARS;
+    const searchContext: SurroundSearchContext = {
+        type: "surroundSearchContext",
+        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
+        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
+        includeLastMatch: params.includeLastMatch ?? true,
+        resultInfo: {}
+    }
+    const onDone = params.onDone ?? null;
+    await doThing2(params.action, editor, searchContext, null, onDone);
+}
+
 async function doThing2(
-    action: "move" | "select" | "extend" | "currentSelection",
+    action: "move" | "select" | "extend",
     editor: vscode.TextEditor,
     searchContext: SearchContext,
     side: "start" | "end" | null,
@@ -72,10 +88,6 @@ async function doThing2(
 ) {
     const newSelectionsOrRanges: (vscode.Selection | vscode.Range)[] = [];
     for (const selection of editor.selections) {
-        if (action === "currentSelection") {
-            newSelectionsOrRanges.push(selection);
-            continue;
-        }
         const targets = findTargets(editor, selection, searchContext);
         if (targets === null || targets.length === 0) {
             continue;
@@ -231,12 +243,14 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
             return [match]
         }
     }
-    return null;
+    else if (searchContext.type === "currentSelectionSearchContext") {
+        return [sourceSelection];
+    }
+    throw new Error(`Unrecognized search type: ${searchContext.type}`);
 }
 
 export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLineRequest['params']) {
     const line = params.line;
-    vscode.window.activeTextEditor?.visibleRanges[0]
     editor.selection = new vscode.Selection(line, 0, line, 0);
     await vscode.commands.executeCommand("cursorHome")
 }

@@ -25,7 +25,7 @@ type PingRequest = RequestBase & {
 type SelectInSurroundRequest = RequestBase & {
     method: "SELECT_IN_SURROUND"
     params: {
-        action: "move" | "select" | "extend" | "currentSelection",
+        action: "move" | "select" | "extend",
         left: string | null,
         right: string | null,
         onDone?: OnDone
@@ -185,6 +185,7 @@ type TokenOptions<V extends TokenType> = ExtractOnProp<Token, "type", V>
 type Source = "anchor" | "active" | "start" | "end"
 
 type NodeTarget = {
+    type: "nodeTarget"
     selector: string,
     getEvery?: boolean
     side?: "start" | "end"
@@ -193,12 +194,17 @@ type NodeTarget = {
 }
 
 type TextTarget = {
+    type: "textTarget"
     pattern: string
     side?: "start" | "end"
     count?: number
 }
 
-type Target = NodeTarget | TextTarget
+type CurrentSelectionTarget = {
+    type: "currentSelectionTarget"
+}
+
+type Target = NodeTarget | TextTarget | CurrentSelectionTarget
 
 type OnDone =
     | { type: "delete" }
@@ -212,7 +218,7 @@ type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwar
 type SmartActionParams = {
     source: Source
     action: "move" | "select" | "extend"
-    target: Target,
+    target: NodeTarget | TextTarget,
     direction: "backwards" | "forwards" | "smart",
     onDone?: onDone
 } & TargetAndDirection
@@ -257,4 +263,9 @@ type SurroundSearchContext = {
     resultInfo: { [key in string]: any }
 }
 
-export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext
+type CurrentSelectionSearchContext = {
+    type: "currentSelectionSearchContext"
+    resultInfo: { [key in string]: any }
+}
+
+export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext | CurrentSelectionSearchContext
