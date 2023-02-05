@@ -33,8 +33,8 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
 
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
     const searchContext = params.target.type === "nodeTarget" ?
-        createNodeSearchContext(editor, params.target, params.direction) :
-        createTextSearchContext(params.target, params.direction);
+        createNodeSearchContext(editor, params.target, params.getEvery ?? false) :
+        createTextSearchContext(params.target);
     const side = params.target.side ?? null;
     const onDone = params.onDone ?? null;
     await doThing2(params.action, editor, searchContext, side, onDone);
@@ -64,20 +64,20 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
     await doThing2(params.action, editor, searchContext, null, onDone);
 }
 
-export async function handleSwapAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
-    const count = params.count ?? 1;
-    const firstTarget = params.left ?? BACKWARDS_SURROUND_CHARS;
-    const right = params.right ?? FORWARDS_SURROUND_CHARS;
-    const searchContext: SurroundSearchContext = {
-        type: "surroundSearchContext",
-        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
-        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
-        includeLastMatch: params.includeLastMatch ?? true,
-        resultInfo: {}
-    }
-    const onDone = params.onDone ?? null;
-    await doThing2(params.action, editor, searchContext, null, onDone);
-}
+// export async function handleSwapAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
+//     const count = params.count ?? 1;
+//     const firstTarget = params.left ?? BACKWARDS_SURROUND_CHARS;
+//     const right = params.right ?? FORWARDS_SURROUND_CHARS;
+//     const searchContext: SurroundSearchContext = {
+//         type: "surroundSearchContext",
+//         left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
+//         right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
+//         includeLastMatch: params.includeLastMatch ?? true,
+//         resultInfo: {}
+//     }
+//     const onDone = params.onDone ?? null;
+//     await doThing2(params.action, editor, searchContext, null, onDone);
+// }
 
 async function doThing2(
     action: "move" | "select" | "extend",
@@ -168,34 +168,31 @@ function isNodeTarget(target: Target): target is NodeTarget {
 
 function createTextSearchContext(
     target: TextTarget,
-    direction: "backwards" | "forwards" | "smart",
 ): TextSearchContext {
     const count = target.count ?? 1;
     const side = target.side ?? null;
     const pattern = target.pattern;
-    assert(direction !== "smart");
-    return { type: "textSearchContext", direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
+    return { type: "textSearchContext", direction: target.direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
 }
 
 
 function createNodeSearchContext(
     editor: vscode.TextEditor,
     target: NodeTarget,
-    direction: "backwards" | "forwards" | "smart",
+    getEvery: boolean
 ): NodeSearchContext {
     const count = target.count ?? 1;
     const side = target.side ?? null;
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
-    // ast.dump(root);
+    ast.dump(root);
     const selector = dsl.parseInput(target.selector);
-    const getEvery = target.getEvery ?? false;
     const greedy = target.greedy ?? false;
     return {
         type: "nodeSearchContext",
         count,
         root,
-        direction,
+        direction: target.direction,
         selector,
         side,
         getEvery,

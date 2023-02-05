@@ -187,10 +187,10 @@ type Source = "anchor" | "active" | "start" | "end"
 type NodeTarget = {
     type: "nodeTarget"
     selector: string,
-    getEvery?: boolean
     side?: "start" | "end"
     count?: number
     greedy?: boolean
+    direction: "backwards" | "forwards" | "smart",
 }
 
 type TextTarget = {
@@ -198,6 +198,7 @@ type TextTarget = {
     pattern: string
     side?: "start" | "end"
     count?: number
+    direction: "backwards" | "forwards",
 }
 
 type CurrentSelectionTarget = {
@@ -219,9 +220,9 @@ type SmartActionParams = {
     source: Source
     action: "move" | "select" | "extend"
     target: NodeTarget | TextTarget,
-    direction: "backwards" | "forwards" | "smart",
+    getEvery?: boolean
     onDone?: onDone
-} & TargetAndDirection
+}
 
 type SmartActionRequest = RequestBase & {
     method: "SMART_ACTION",

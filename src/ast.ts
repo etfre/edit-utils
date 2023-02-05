@@ -59,16 +59,14 @@ export function findMatches(pathNode: PathNode, selector: dsl.Selector, greedy: 
     else {
         matchContext = new MatchContext()
         matches = matchNodeEntryTopDown(pathNode.node, selector, matchContext)
-        if (matches.length > 0) {
+        const rootMatch = matchContext.rootMatch;
+        if (matches.length > 0 && rootMatch) {
+            matches = matches.map(match => {
+                const highestMatchedOptional = traverseUpOptionals(match, rootMatch, matchContext);
+                return highestMatchedOptional;
+            })
             console.log('top down match')
         }
-    }
-    const rootMatch = matchContext.rootMatch;
-    if (rootMatch !== null) {
-        matches = matches.map(match => {
-            const highestMatchedOptional = traverseUpOptionals(match, rootMatch, matchContext);
-            return highestMatchedOptional;
-        })
     }
     if (greedy) {
         const greedyMatches: TreeNode[] = [];
@@ -414,18 +412,22 @@ function matchNodeEntryBottomUpHelper(node: TreeNode, leafSelector: dsl.Selector
     let currNode: TreeNode | null = node;
     let currSelector: dsl.Selector | null = leafSelector;
     let firstMatch: TreeNode | null = null;
+    const matches: [TreeNode, dsl.Selector][] = [];
     while (currSelector !== null && currNode !== null) {
         let parent = currNode.parent;
         let nodesToTest = parent === null ? [currNode] : parent.children;
+        if (currNode.type === "integer") {
+            let x = 1;
+        }
         const matched = testNodes(nodesToTest, currSelector, matchContext, false);
         const currId = currNode.id;
         const isMatch = currSelector.isLastSliceImplicit ? // distinguish between *[6] and *
             matched.some(x => x.id === currId) :
             matched.length === 1 && matched[0].id === currId;
         if (isMatch) {
+            matches.push([currNode, currSelector])
             if (firstMatch === null) {
                 firstMatch = currNode;
-                matchContext.rootMatch = currSelector
             }
             currSelector = currSelector.parent;
             currNode = currNode.parent === null ? null : currNode.parent;
@@ -434,7 +436,6 @@ function matchNodeEntryBottomUpHelper(node: TreeNode, leafSelector: dsl.Selector
             currSelector = currSelector.parent;
         }
         else { // mismatch on a required field
-            matchContext.rootMatch = null;
             return null;
         }
     }

@@ -1,13 +1,16 @@
 import * as vscode from 'vscode';
 
 import { watchFile, watch, writeFile, readFile, FSWatcher } from 'fs';
-import { tmpdir } from 'os';
+import { tmpdir, } from 'os';
 import * as handlers from "./handlers"
 import { sep, join } from 'path';
 import { ClientRequest, ClientResponse, ClientResponseError, ClientResponseResult } from './types';
 
-const RPC_INPUT_FILE = tmpdir() + sep + "speech-commands-input.json"
-const RPC_OUTPUT_FILE = tmpdir() + sep + "speech-commands-output.json"
+const appData = process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share")
+const fileRoot = join(appData, "corgi")
+
+const RPC_INPUT_FILE = join(fileRoot, "speech-commands-input.json")
+const RPC_OUTPUT_FILE = join(fileRoot, "speech-commands-output.json")
 
 let inputFileWatcher: FSWatcher | null = null
 
@@ -28,7 +31,6 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SURROUND_INSERT": handlers.handleSurroundInsert,
     "EXECUTE_COMMANDS_PER_SELECTION": handlers.handleExecuteCommandsPerSelection,
 }
-
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
     const messageStr = JSON.stringify(msg)
     const prom = new Promise<void>((resolve, reject) => {
