@@ -46,7 +46,7 @@ export function findNode(
 
 function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "backwards" | "forwards" | "smart"): boolean {
     if (direction === "backwards") {
-        return ast.vscodePositionFromNodePosition(testNode.startPosition).isBefore(selection.start);
+        return ast.vscodePositionFromNodePosition(testNode.endPosition).isBefore(selection.start);
     }
     else if (direction === "forwards") {
         return ast.vscodePositionFromNodePosition(testNode.startPosition).isAfter(selection.end);

@@ -127,8 +127,8 @@ export function* iterDirection(
         const parent = pathNode.parent.node;
         const children = parent.node.children
         const siblingIter = isReverse ?
-            sliceIndices(children, indexOfChild - 1, 0, -1) :
-            sliceIndices(children, indexOfChild + 1, children.length, 1)
+            sliceIndices(children.length, indexOfChild - 1, 0, -1) :
+            sliceIndices(children.length, indexOfChild + 1, children.length, 1)
         for (const siblingIdx of siblingIter) {
             const sibling = children[siblingIdx]
             for (const siblingPath of pathsChildrenFirst(sibling, isReverse)) {
@@ -388,7 +388,7 @@ function traverseUpOptionals(node: TreeNode, selector: dsl.Selector, matchContex
     let highestMatch = node;
     let currNode = node.parent;
     let currSelector = selector.parent;
-    while (currNode !== null && currSelector !== null) {
+    while (currNode !== null && currSelector !== null && currSelector.isOptional) {
         if (!testNode(currNode, currSelector, matchContext)) {
             break;
         }
