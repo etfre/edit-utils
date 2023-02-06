@@ -86,6 +86,20 @@ class Parser {
         }
         assert(this.selectors.length > 0);
         this.finalizeLeafSelector();
+        const firstSelector = this.selectors[0]
+        // if first selector is multiple, add a wildcard in front
+        if (firstSelector.directives.length > 1 || !firstSelector.isLastSliceImplicit) {
+            this.selectors.unshift({
+                type: "Selector",
+                tokenType: {type: "wildcard"},
+                isOptional: false,
+                parent: null,
+                child: null,
+                isMark: false,
+                directives: [{directives: [], sliceAtEnd: {start: 0, stop: 1, step: 1}}],
+                isLastSliceImplicit: false
+            })
+        }
         for (const [i, selector] of this.selectors.slice(0, -1).entries()) {
             const child = this.selectors[i + 1];
             linkSelectors(selector, child);

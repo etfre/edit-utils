@@ -68,6 +68,7 @@ type ClientRequest =
     | SmartActionRequest
     | SurroundInsertRequest
     | ExecuteCommandsPerSelectionRequest
+    | SwapRequest
 
 type ClientResponseResult = JSONValue
 
@@ -227,6 +228,11 @@ type SmartActionParams = {
 type SmartActionRequest = RequestBase & {
     method: "SMART_ACTION",
     params: SmartActionParams
+}
+
+type SwapRequest = RequestBase & {
+    method: "SWAP"
+    params: {target1: NodeTarget, target2: NodeTarget, getEvery?: boolean}
 }
 
 type SurroundInsertRequest = RequestBase & {

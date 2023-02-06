@@ -2,7 +2,7 @@ import * as vscode from "vscode"
 import { Directive, isOptionalDirective } from "./directives";
 import { yieldSubtypes } from "./nodeLoader";
 import * as dsl from "./parser"
-import { TreeNode } from "./types";
+import { NodeSearchContext, SearchContext, TreeNode } from "./types";
 import { assert, reversed, sliceArray, sliceIndices } from "./util";
 
 export let parseTreeExtensionExports: object | null = null
@@ -39,26 +39,28 @@ export function* pathsChildrenFirst(
 }
 
 
-export function* search(pathNodeGenerator: Generator<PathNode>, selector: dsl.Selector, greedy: boolean): Generator<TreeNode[]> {
+export function* search(pathNodeGenerator: Generator<PathNode>, searchContext: NodeSearchContext): Generator<TreeNode[]> {
     for (let pathNode of pathNodeGenerator) {
-        const matches = findMatches(pathNode, selector, greedy);
+        const matches = findMatches(pathNode, searchContext);
         if (matches.length > 0) {
             yield matches;
         }
     }
 }
 
-export function findMatches(pathNode: PathNode, selector: dsl.Selector, greedy: boolean = false): TreeNode[] {
+export function findMatches(pathNode: PathNode, searchContext: NodeSearchContext): TreeNode[] {
     let matchContext = new MatchContext();
     let matches: TreeNode[] = []
-    let bottomUpMatch = matchNodeEntryBottomUp(pathNode.node, selector, matchContext)
-    if (bottomUpMatch !== null) {
-        console.log('bottom up match')
-        matches = [bottomUpMatch]
+    if (!searchContext.getEvery) {
+        let bottomUpMatch = matchNodeEntryBottomUp(pathNode.node, searchContext.selector, matchContext)
+        if (bottomUpMatch !== null) {
+            console.log('bottom up match')
+            matches = [bottomUpMatch]
+        }
     }
-    else {
+    if (matches.length === 0) {
         matchContext = new MatchContext()
-        matches = matchNodeEntryTopDown(pathNode.node, selector, matchContext)
+        matches = matchNodeEntryTopDown(pathNode.node, searchContext.selector, matchContext)
         const rootMatch = matchContext.rootMatch;
         if (matches.length > 0 && rootMatch) {
             matches = matches.map(match => {
@@ -68,7 +70,7 @@ export function findMatches(pathNode: PathNode, selector: dsl.Selector, greedy: 
             console.log('top down match')
         }
     }
-    if (greedy) {
+    if (searchContext.greedy) {
         const greedyMatches: TreeNode[] = [];
         // searching upwards so discard a match if we've already got a common ancestor
         const seenIds = new Set<number>();
@@ -77,7 +79,7 @@ export function findMatches(pathNode: PathNode, selector: dsl.Selector, greedy: 
             let matchResult: TreeNode | null = match;
             let curr = match.parent;
             while (curr) {
-                matchResult = matchNodeEntryBottomUp(curr, selector, matchContext);
+                matchResult = matchNodeEntryBottomUp(curr, searchContext.selector, matchContext);
                 if (matchResult) {
                     if (seenIds.has(matchResult.id)) {
                         greedyMatch = null;
@@ -282,7 +284,7 @@ function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
     let max = Infinity;
     const [start, stop] = [slice.start, slice.stop];
     if (stop !== null && stop > 0) { // example: [:6] we only need to scan for the first 6 elements
-        max = stop;
+        // max = stop;
     }
     else if (start !== null && start < 0) { // example: [-5:] we only need to scan for the last 5 elements
         // not implemented yet because reverse needs to be handled in testNodes in several locations. YAGNI?
@@ -306,9 +308,11 @@ function getNextSliceMax(slice: dsl.Slice): { max: number, reverse: boolean } {
 
 // When searching top down, last index is implicitly [0] b/c we take the first match
 function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: MatchContext, applyImplicitSliceAtEnd: boolean) {
-    let nextMax = selector.directives.length === 1 && selector.isLastSliceImplicit ?
+    const applyLastSlice = !selector.isLastSliceImplicit || applyImplicitSliceAtEnd
+    let nextMax = selector.directives.length === 1 && applyLastSlice ?
         { max: Infinity, reverse: false } :
         getNextSliceMax(selector.directives[0].sliceAtEnd);
+    selector.isLastSliceImplicit
     let remainingNodes: TreeNode[] = [];
     for (let node of nodes) {
         if (remainingNodes.length >= nextMax.max) {
@@ -321,7 +325,7 @@ function testNodes(nodes: TreeNode[], selector: dsl.Selector, matchContext: Matc
     for (const [i, directivesGroup] of selector.directives.entries()) {
         let filteredRemainingNodes: TreeNode[] = [];
         const isLast = i === selector.directives.length - 1;
-        const applySlice = !isLast || applyImplicitSliceAtEnd;
+        const applySlice = !isLast || applyLastSlice;
         for (const node of remainingNodes) {
             if (applySlice && remainingNodes.length >= nextMax.max) {
                 break;
@@ -351,8 +355,8 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
     // dictionary.pair[2]
     // dictionary.pair.value
     const applyImplicitSliceAtEnd = true;
-    let remainingNodes = testNodes(nodes, selector, matchContext, applyImplicitSliceAtEnd);
-    const isMatch = remainingNodes.length > 0;
+    let matchedNodes = testNodes(nodes, selector, matchContext, applyImplicitSliceAtEnd);
+    const isMatch = matchedNodes.length > 0;
     const childSelector = selector.child
     const isSelectorLeaf = childSelector === null
     if (isMatch) {
@@ -363,20 +367,20 @@ function matchNodesTopDown(nodes: TreeNode[], selector: dsl.Selector, matchConte
             matchContext.rootMatch = null
         }
         if (isSelectorLeaf) {
-            return remainingNodes;
+            return matchedNodes;
         }
         else {
             let subMatches: TreeNode[] = []
-            for (const matchedNode of remainingNodes) {
+            for (const matchedNode of matchedNodes) {
                 subMatches = subMatches.concat(matchNodesTopDown(matchedNode.children, childSelector, matchContext));
             }
-            remainingNodes = subMatches;
+            matchedNodes = subMatches;
         }
     }
-    if (selector.isOptional && !isSelectorLeaf && remainingNodes.length === 0) {
+    if (selector.isOptional && !isSelectorLeaf && matchedNodes.length === 0) {
         return matchNodesTopDown(nodes, childSelector, matchContext);
     }
-    return remainingNodes;
+    return matchedNodes;
 }
 
 

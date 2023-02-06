@@ -30,6 +30,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SMART_ACTION": handlers.handleSmartAction,
     "SURROUND_INSERT": handlers.handleSurroundInsert,
     "EXECUTE_COMMANDS_PER_SELECTION": handlers.handleExecuteCommandsPerSelection,
+    "SWAP": handlers.handleSwap,
 }
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
     const messageStr = JSON.stringify(msg)

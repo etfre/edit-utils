@@ -3,7 +3,7 @@ import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } fr
 import * as ast from "./ast"
 import * as dsl from "./parser"
 import { assert, mergeGenerators, unEscapeRegex } from './util';
-import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, Target, TextSearchContext, TextTarget, TreeNode } from './types';
+import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target, TextSearchContext, TextTarget, TreeNode } from './types';
 import { findNode } from './nodeSearch';
 
 
@@ -255,4 +255,33 @@ export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLine
 export async function handleExecuteCommand(editor: vscode.TextEditor, params: ExecuteCommandRequest['params']) {
     const args = params.args ?? [];
     await vscode.commands.executeCommand(params.command, ...args)
+}
+
+export async function handleSwap(editor: vscode.TextEditor, params: SwapRequest['params']) {
+    const searchContext1 = createNodeSearchContext(editor, params.target1, params.getEvery ?? false)
+    const searchContext2 = createNodeSearchContext(editor, params.target2, params.getEvery ?? false)
+    const toReplace: [vscode.Range, string][] = [];
+    for (const selection of editor.selections) {
+        const targets1 = findTargets(editor, selection, searchContext1);
+        if (targets1 === null || targets1.length === 0) {
+            continue;
+        }
+        const targets2 = findTargets(editor, selection, searchContext2);
+        if (targets2 === null || targets2.length !== targets1.length) {
+            continue;
+        }
+        for (const [i, target1] of targets1.entries()) {
+            const target2 = targets2[i];
+            const text1 = editor.document.getText(target1);
+            const text2 = editor.document.getText(target2);
+            toReplace.push([target1, text2])
+            toReplace.push([target2, text1])
+        } 
+    }
+    editor.edit(builder => {
+        for (const [target, text] of toReplace) {
+            builder.replace(target, text)
+        }
+    });
+
 }
