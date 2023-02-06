@@ -5,6 +5,7 @@ import * as dsl from "./parser"
 import { assert, mergeGenerators, unEscapeRegex } from './util';
 import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target, TextSearchContext, TextTarget, TreeNode } from './types';
 import { findNode } from './nodeSearch';
+import { focusAndSelectBookmarks, setBookmarkFromSelection } from './bookmark';
 
 
 export async function handlePing() {
@@ -284,4 +285,12 @@ export async function handleSwap(editor: vscode.TextEditor, params: SwapRequest[
         }
     });
 
+}
+
+export async function handleSetBookmarks(editor: vscode.TextEditor, params: {}) {
+    setBookmarkFromSelection(editor);
+}
+
+export async function handleFocusAndSelectBookmark(editor: vscode.TextEditor, params: {}) {
+    focusAndSelectBookmarks(editor);
 }

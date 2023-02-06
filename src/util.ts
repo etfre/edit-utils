@@ -7,44 +7,6 @@ export function sliceArray<T>(arr: T[], start: number = 0, stop: number | null =
     return sliced;
 }
 
-// export function* sliceIndices(arr: any[], start: number, stop: number | null = null, step: number) {
-//     if (step === 0) {
-//         throw new Error("Step cannot be 0")
-//     }
-//     const isForward = step > 0;
-//     const arrLength = arr.length
-//     if (arrLength === 0) {
-//         return
-//     }
-//     if (start < 0) {
-//         start = arrLength + start;
-//     }
-//     if (stop === null) {
-//         stop = isForward ? Infinity : -Infinity
-//     }
-//     else if (stop < 0) {
-//         stop = arrLength + stop
-//     }
-//     if (isForward) {
-//         stop = Math.min(arrLength, stop)
-//     }
-//     else {
-//         stop = Math.max(-1, stop);
-//     }
-//     if (isForward) {
-//         for (let i = start; i < stop; i += step) {
-//             assert(i >= 0 && i <= arrLength)
-//             yield i
-//         }
-//     }
-//     else {
-//         for (let i = start; i > stop; i += step) {
-//             assert(i >= 0 && i <= arrLength)
-//             yield i
-//         }
-//     }
-// }
-
 function adjust_endpoint(length: number, endpoint: number, step: number) {
     if (endpoint < 0) {
         endpoint += length
@@ -60,16 +22,13 @@ function adjust_endpoint(length: number, endpoint: number, step: number) {
 
 function adjust_slice(length: number, start: number, stop: number | null, step: number) {
     assert(step != 0)
-
     start = adjust_endpoint(length, start, step)
-
     if (stop === null) {
         stop = step < 0 ? -1 : length
     }
     else {
         stop = adjust_endpoint(length, stop, step)
     }
-
     return [start, stop, step]
 }
 

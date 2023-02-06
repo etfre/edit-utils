@@ -60,6 +60,16 @@ type GoToLineRequest = RequestBase & {
     }
 }
 
+type SetBookmarksRequest = RequestBase & {
+    method: "SET_BOOKMARKS"
+    params: []
+}
+
+type SelectAndFocusBookmarksRequest = RequestBase & {
+    method: "FOCUS_AND_SELECT_BOOKMARKS"
+    params: []
+}
+
 type ClientRequest =
     | PingRequest
     | SelectInSurroundRequest
@@ -69,6 +79,8 @@ type ClientRequest =
     | SurroundInsertRequest
     | ExecuteCommandsPerSelectionRequest
     | SwapRequest
+    | SetBookmarksRequest
+    | SelectAndFocusBookmarksRequest
 
 type ClientResponseResult = JSONValue
 

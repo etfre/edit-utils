@@ -31,6 +31,8 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SURROUND_INSERT": handlers.handleSurroundInsert,
     "EXECUTE_COMMANDS_PER_SELECTION": handlers.handleExecuteCommandsPerSelection,
     "SWAP": handlers.handleSwap,
+    "SET_BOOKMARKS": handlers.handleSetBookmarks,
+    "FOCUS_AND_SELECT_BOOKMARKS": handlers.handleFocusAndSelectBookmark,
 }
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
     const messageStr = JSON.stringify(msg)
