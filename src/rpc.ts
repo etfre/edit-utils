@@ -56,8 +56,8 @@ export function watchRPCInputFile() {
             console.log("inputFileWatcher init")
         }
     }
-    catch (e) {
-        console.log(e)
+    catch (err) {
+        console.log(err)
         if (inputFileWatcher !== null) {
             inputFileWatcher.close()
         }

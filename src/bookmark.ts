@@ -8,7 +8,6 @@ export function setupBookmarkEvents() {
         const uri = event.document.uri.toString();
         event.contentChanges
         for (const change of event.contentChanges) {
-            console.log(change.text, change.rangeLength, change.rangeOffset)
             // event.document.
             const newRange = new vscode.Range(1,2,3,4)
         }
@@ -57,7 +56,6 @@ export function setBookmarkFromSelection(editor: vscode.TextEditor) {
     const uri = editor.document.uri.toString()
     const bookmarks = editor.selections.map(selection => new Bookmark(selection));
     activeBookmarks.set(uri, bookmarks);
-    console.log(bookmarks)
 }
 
 export function focusAndSelectBookmarks(editor: vscode.TextEditor) {
