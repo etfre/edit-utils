@@ -23,7 +23,7 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
             await vscode.commands.executeCommand(params.onDone.commandName);
         }
         else {
-            const selectionSearchResults: MatchDetails[] = [{selections:editor.selections, onDoneTargets: editor.selections}];
+            const selectionSearchResults: MatchDetails[] = [{ selections: editor.selections, onDoneTargets: editor.selections }];
             await doOnDone(editor, selectionSearchResults, params.onDone)
         }
     }
@@ -31,16 +31,16 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
 
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
     const searchContext = params.target.type === "nodeTarget" ?
-    createNodeSearchContext(editor, params.target, params.getEvery ?? false) :
-    createTextSearchContext(params.target);
+        createNodeSearchContext(editor, params.target, params.getEvery ?? false) :
+        createTextSearchContext(params.target);
     const side = params.target.side ?? null;
     const onDone = params.onDone ?? null;
     await doThing2(params.action, editor, searchContext, side, onDone);
 }
 
 export async function handleSurroundInsert(editor: vscode.TextEditor, params: SurroundInsertRequest['params']) {
-    const searchContext: CurrentSelectionSearchContext = {type: "currentSelectionSearchContext", resultInfo: {}}
-    const onDone: OnDone = {type: "surroundInsert", left: params.left, right: params.right}
+    const searchContext: CurrentSelectionSearchContext = { type: "currentSelectionSearchContext", resultInfo: {} }
+    const onDone: OnDone = { type: "surroundInsert", left: params.left, right: params.right }
     await doThing2("select", editor, searchContext, null, onDone);
 }
 
@@ -91,7 +91,7 @@ function translateMatches(
         return { selections: extended, onDoneTargets: [] }
     }
     const matchedSelections = matchedTargets.map(x => ensureSelection(x))
-    const odt = onDone?.type ?? null; 
+    const odt = onDone?.type ?? null;
     if (odt === null) {
         return { selections: matchedSelections, onDoneTargets: [] }
     }
@@ -111,7 +111,9 @@ function translateMatches(
         const slicedSelections = matchedSelections.map(x => shrinkSelection(x, startLength, endLength));
         return { selections: [selection], onDoneTargets: slicedSelections }
     }
-    throw new Error("")
+    else {
+        throw new Error("");
+    }
 }
 
 async function doThing2(
@@ -183,7 +185,7 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
     else if (odt === "delete" || odt === "moveAndDelete" || odt === "moveAndPaste" || odt === "paste") {
         let replaceWith = ""
         if (odt === "moveAndPaste" || odt === "paste") {
-            const clipContents  = await vscode.env.clipboard.readText();
+            const clipContents = await vscode.env.clipboard.readText();
             const clipLines = clipContents.split("\n");
             //TODO
         }
@@ -201,7 +203,7 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
             });
         }
     }
-    throw new Error("") 
+    throw new Error("")
 }
 
 function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
