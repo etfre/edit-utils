@@ -97,7 +97,7 @@ async function handleRpcInputFileChange(path: string) {
     readFile(path, { encoding: 'utf-8' }, async (err, data) => {
         if (!err) {
             const editor = vscode.window.activeTextEditor;
-            if (!editor) {
+            if (!editor || vscode.window.visibleTextEditors.length === 0 || !vscode.window.state.focused) {
                 return;
             }
             const responses: ClientResponse[] = []

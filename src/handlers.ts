@@ -13,11 +13,9 @@ export async function handlePing() {
 }
 
 export async function handleExecuteCommandsPerSelection(editor: vscode.TextEditor, params: ExecuteCommandsPerSelectionRequest['params']) {
-    for (const selection of editor.selections) {
-        for (let i = 0; i < params.count; i++) {
-            for (const cmd of params.commands) {
-                await vscode.commands.executeCommand(cmd)
-            }
+    for (let i = 0; i < params.count; i++) {
+        for (const cmd of params.commands) {
+            await vscode.commands.executeCommand(cmd)
         }
     }
     if (params.onDone) {
@@ -25,15 +23,16 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
             await vscode.commands.executeCommand(params.onDone.commandName);
         }
         else {
-            throw new Error("")
+            const selectionSearchResults: MatchDetails[] = [{selections:editor.selections, onDoneTargets: editor.selections}];
+            await doOnDone(editor, selectionSearchResults, params.onDone)
         }
     }
 }
 
 export async function handleSmartAction(editor: vscode.TextEditor, params: SmartActionParams) {
     const searchContext = params.target.type === "nodeTarget" ?
-        createNodeSearchContext(editor, params.target, params.getEvery ?? false) :
-        createTextSearchContext(params.target);
+    createNodeSearchContext(editor, params.target, params.getEvery ?? false) :
+    createTextSearchContext(params.target);
     const side = params.target.side ?? null;
     const onDone = params.onDone ?? null;
     await doThing2(params.action, editor, searchContext, side, onDone);
@@ -61,8 +60,8 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
 }
 
 type MatchDetails = {
-    selections: vscode.Selection[]
-    onDoneTargets: (vscode.Selection | vscode.Selection[])[]
+    selections: readonly vscode.Selection[]
+    onDoneTargets: readonly (vscode.Selection | vscode.Selection[])[]
 }
 
 function translateMatches(
@@ -74,7 +73,8 @@ function translateMatches(
     searchContext: SearchContext,
 ): MatchDetails {
     if (action === "move") {
-        return { selections: matchedTargets.map(x => ensureSelection(x)), onDoneTargets: [] }
+        const selections = matchedTargets.map(x => ensureSelection(side == null ? x.start : x[side]))
+        return { selections, onDoneTargets: [] }
     }
     if (action === "extend") {
         const extended: vscode.Selection[] = []
@@ -140,11 +140,11 @@ async function doThing2(
         editor.selections = newSelections;
     }
     if (onDone !== null) {
-        doOnDone(editor, selectionSearchResults, onDone, searchContext)
+        doOnDone(editor, selectionSearchResults, onDone)
     }
 }
 
-async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: MatchDetails[], onDone: OnDone, searchContext?: SearchContext) {
+async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: MatchDetails[], onDone: OnDone) {
     const odt = onDone.type;
     if (odt === "executeCommand") {
         await vscode.commands.executeCommand(onDone.commandName);
@@ -183,6 +183,8 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
     else if (odt === "delete" || odt === "moveAndDelete" || odt === "moveAndPaste" || odt === "paste") {
         let replaceWith = ""
         if (odt === "moveAndPaste" || odt === "paste") {
+            const clipContents  = await vscode.env.clipboard.readText();
+            const clipLines = clipContents.split("\n");
             //TODO
         }
         editor.edit(builder => {
@@ -238,7 +240,7 @@ function createNodeSearchContext(
     const side = target.side ?? null;
     const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
     const root = tree.rootNode
-    ast.dump(root);
+    // ast.dump(root);
     const selector = dsl.parseInput(target.selector);
     const greedy = target.greedy ?? false;
     return {
