@@ -1,3 +1,5 @@
+import * as vscode from "vscode";
+
 export function sliceArray<T>(arr: T[], start: number = 0, stop: number | null = null, step: number = 1): Array<T> {
     const sliced: T[] = []
     for (let idx of sliceIndices(arr.length, start, stop, step)) {
@@ -81,3 +83,42 @@ export function* mergeGenerators<T>(...generators: Generator<T>[]) {
 export function unEscapeRegex(escaped: string) {
     return escaped.replace(/\\(.)/g, '$1');
 }
+
+export function ensureSelection(val: vscode.Range | vscode.Position): vscode.Selection {
+    const isValSelection = isSelection(val)
+    if (isValSelection) {
+        return val
+    }
+    if (val instanceof vscode.Range) {
+        return new vscode.Selection(val.start, val.end)
+    }
+    return new vscode.Selection(val, val);
+}
+
+function isSelection(val: vscode.Range | vscode.Position): val is vscode.Selection {
+    return "anchor" in val;
+}
+
+export function shrinkSelection(selection: vscode.Selection, startLength: number, endLength: number): vscode.Selection {
+    const start = selection.start.translate(0, -startLength);
+    const end = selection.end.translate(0, -endLength);
+    assert(start.isBeforeOrEqual(end))
+    const isReverse = selection.active.isBefore(selection.anchor);
+    const [anchor, active] = isReverse ? [end, start] : [start, end]
+    return new vscode.Selection(anchor, active)
+}
+
+export function flatten<T>(arr: (T | T[])[]): T[] {
+    let flattened: T[] = [];
+    for (const item of arr) {
+        if (Array.isArray(item)) {
+            flattened = flattened.concat(flatten(item))
+        }
+        else {
+            flattened.push(item)
+        }
+    }
+    return flattened;
+}
+
+flatten([1,2,3])

@@ -2,8 +2,8 @@ import * as vscode from 'vscode';
 import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } from "./textSearch"
 import * as ast from "./ast"
 import * as dsl from "./parser"
-import { assert, mergeGenerators, unEscapeRegex } from './util';
-import { ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target, TextSearchContext, TextTarget, TreeNode } from './types';
+import { assert, ensureSelection, mergeGenerators, shrinkSelection, unEscapeRegex } from './util';
+import { CurrentSelectionSearchContext, ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest, SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target, TextSearchContext, TextTarget, TreeNode } from './types';
 import { findNode } from './nodeSearch';
 import { focusAndSelectBookmarks, setBookmarkFromSelection } from './bookmark';
 
@@ -25,9 +25,7 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
             await vscode.commands.executeCommand(params.onDone.commandName);
         }
         else {
-            for (const selection of editor.selections) {
-                doOnDone(editor, selection, params.onDone)
-            }
+            throw new Error("")
         }
     }
 }
@@ -42,12 +40,9 @@ export async function handleSmartAction(editor: vscode.TextEditor, params: Smart
 }
 
 export async function handleSurroundInsert(editor: vscode.TextEditor, params: SurroundInsertRequest['params']) {
-    for (const selection of editor.selections) {
-        const text = editor.document.getText(selection)
-        editor.edit(builder => {
-            builder.replace(selection, `${params.left}${text}${params.right}`);
-        });
-    }
+    const searchContext: CurrentSelectionSearchContext = {type: "currentSelectionSearchContext", resultInfo: {}}
+    const onDone: OnDone = {type: "surroundInsert", left: params.left, right: params.right}
+    await doThing2("select", editor, searchContext, null, onDone);
 }
 
 export async function handleSurroundAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
@@ -65,20 +60,59 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
     await doThing2(params.action, editor, searchContext, null, onDone);
 }
 
-// export async function handleSwapAction(editor: vscode.TextEditor, params: SelectInSurroundRequest['params']) {
-//     const count = params.count ?? 1;
-//     const firstTarget = params.left ?? BACKWARDS_SURROUND_CHARS;
-//     const right = params.right ?? FORWARDS_SURROUND_CHARS;
-//     const searchContext: SurroundSearchContext = {
-//         type: "surroundSearchContext",
-//         left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
-//         right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
-//         includeLastMatch: params.includeLastMatch ?? true,
-//         resultInfo: {}
-//     }
-//     const onDone = params.onDone ?? null;
-//     await doThing2(params.action, editor, searchContext, null, onDone);
-// }
+type MatchDetails = {
+    selections: vscode.Selection[]
+    onDoneTargets: (vscode.Selection | vscode.Selection[])[]
+}
+
+function translateMatches(
+    action: "move" | "select" | "extend",
+    onDone: OnDone | null,
+    matchedTargets: vscode.Range[],
+    selection: vscode.Selection,
+    side: "start" | "end" | null,
+    searchContext: SearchContext,
+): MatchDetails {
+    if (action === "move") {
+        return { selections: matchedTargets.map(x => ensureSelection(x)), onDoneTargets: [] }
+    }
+    if (action === "extend") {
+        const extended: vscode.Selection[] = []
+        for (const target of matchedTargets) {
+            const newTarget = side === null ? target : new vscode.Range(target[side], target[side]);
+            if (selection.active.isBefore(selection.anchor) && newTarget.start.isBefore(selection.active)) {
+                extended.push(new vscode.Selection(selection.anchor, newTarget.start));
+            }
+            else {
+                const merged = ensureSelection(selection.union(newTarget));
+                extended.push(merged);
+            }
+        }
+        return { selections: extended, onDoneTargets: [] }
+    }
+    const matchedSelections = matchedTargets.map(x => ensureSelection(x))
+    const odt = onDone?.type ?? null; 
+    if (odt === null) {
+        return { selections: matchedSelections, onDoneTargets: [] }
+    }
+    else if (odt === "executeCommand") {
+        return { selections: matchedSelections, onDoneTargets: matchedSelections }
+    }
+    else if (odt === "copy" || odt === "cut" || odt === "delete" || odt === "paste" || odt === "surroundInsert") {
+        return { selections: [selection], onDoneTargets: matchedSelections }
+    }
+    else if (odt === "moveAndDelete" || odt === "moveAndPaste") {
+        return { selections: matchedSelections, onDoneTargets: matchedSelections }
+    }
+    else if (odt === "surroundReplace") {
+        assert(searchContext?.type === "surroundSearchContext")
+        const startLength = searchContext.left.resultInfo.matchLength as number;
+        const endLength = searchContext.right.resultInfo.matchLength as number;
+        const slicedSelections = matchedSelections.map(x => shrinkSelection(x, startLength, endLength));
+        return { selections: [selection], onDoneTargets: slicedSelections }
+    }
+    throw new Error("")
+}
 
 async function doThing2(
     action: "move" | "select" | "extend",
@@ -87,67 +121,85 @@ async function doThing2(
     side: "start" | "end" | null,
     onDone: OnDone | null
 ) {
-    const newSelectionsOrRanges: (vscode.Selection | vscode.Range)[] = [];
+    let selectionSearchResults: MatchDetails[] = [];
     for (const selection of editor.selections) {
         const targets = findTargets(editor, selection, searchContext);
         if (targets === null || targets.length === 0) {
             continue;
         }
-        for (const target of targets) {
-            if (action === "select") {
-                newSelectionsOrRanges.push(target);
-            }
-            else if (action === "move") {
-                assert(side !== null);
-                const newPos = target[side];
-                newSelectionsOrRanges.push(new vscode.Selection(newPos, newPos));
-            }
-            else if (action === "extend") {
-                const newTarget = side === null ? target : new vscode.Range(target[side], target[side]);
-                if (selection.active.isBefore(selection.anchor) && newTarget.start.isBefore(selection.active)) {
-                    newSelectionsOrRanges.push(new vscode.Selection(selection.anchor, newTarget.start));
-                }
-                else {
-                    const merged = selection.union(newTarget);
-                    newSelectionsOrRanges.push(merged);
-                }
-            }
-            else {
-                throw new Error(`unrecognized action`);
-            }
-        }
+        selectionSearchResults.push(translateMatches(action, onDone, targets, selection, side, searchContext));
     }
-    const newSelections = newSelectionsOrRanges.map(x => {
-        if (!('anchor' in x)) {
-            return new vscode.Selection(x.start, x.end);
-        }
-        return x;
-    });
-    if (onDone === null || !["surroundReplace"].includes(onDone.type)) {
+    if (selectionSearchResults.length === 0) {
+        return;
+    }
+    let newSelections: vscode.Selection[] = [];
+    for (const matchResult of selectionSearchResults) {
+        newSelections = newSelections.concat(matchResult.selections)
+    }
+    if (newSelections.length > 0) {
         editor.selections = newSelections;
     }
     if (onDone !== null) {
-        if (onDone.type === "executeCommand") {
-            await vscode.commands.executeCommand(onDone.commandName);
-        }
-        else {
-            for (const selection of newSelections) {
-                doOnDone(editor, selection, onDone, searchContext)
-            }
-        }
+        doOnDone(editor, selectionSearchResults, onDone, searchContext)
     }
 }
 
-function doOnDone(editor: vscode.TextEditor, selection: vscode.Selection, onDone: OnDone, searchContext?: SearchContext) {
-    if (onDone.type === "surroundReplace") {
-        assert(searchContext?.type === "surroundSearchContext")
-        const leftLength = searchContext.left.resultInfo.matchLength;
-        const rightLength = searchContext.right.resultInfo.matchLength;
-        const text = editor.document.getText(selection).slice(leftLength, -rightLength);
+async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: MatchDetails[], onDone: OnDone, searchContext?: SearchContext) {
+    const odt = onDone.type;
+    if (odt === "executeCommand") {
+        await vscode.commands.executeCommand(onDone.commandName);
+        return;
+    }
+    let allTargets: vscode.Selection[] = [];
+    for (const result of selectionSearchResults) {
+        const flattened = (result.onDoneTargets ?? []).flat();
+        allTargets = allTargets.concat(flattened);
+    }
+    if (odt === "surroundReplace") {
         editor.edit(builder => {
-            builder.replace(selection, `${onDone.left}${text}${onDone.right}`)
+            for (const target of allTargets) {
+                const text = editor.document.getText(target);
+                builder.replace(target, `${onDone.left}${text}${onDone.right}`)
+            }
         });
     }
+    else if (odt === "copy" || odt === "cut") {
+        const newClip: string[] = [];
+        for (const sel of allTargets) {
+            newClip.push(editor.document.getText(sel));
+        }
+        await vscode.env.clipboard.writeText(newClip.join("\n"));
+        if (odt === "cut") {
+            editor.edit(builder => {
+                for (const target of allTargets) {
+                    builder.replace(target, "")
+                }
+            });
+        }
+        else {
+            vscode.window.showInformationMessage('Copied text');
+        }
+    }
+    else if (odt === "delete" || odt === "moveAndDelete" || odt === "moveAndPaste" || odt === "paste") {
+        let replaceWith = ""
+        if (odt === "moveAndPaste" || odt === "paste") {
+            //TODO
+        }
+        editor.edit(builder => {
+            for (const target of allTargets) {
+                builder.replace(target, replaceWith)
+            }
+        });
+    }
+    else if (odt === "surroundInsert") {
+        for (const selection of allTargets) {
+            const text = editor.document.getText(selection)
+            editor.edit(builder => {
+                builder.replace(selection, `${onDone.left}${text}${onDone.right}`);
+            });
+        }
+    }
+    throw new Error("") 
 }
 
 function getTextRange(editor: vscode.TextEditor, reverse: boolean, startedSelection: vscode.Position) {
@@ -227,6 +279,7 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
         if (result !== null) {
             return [result];
         }
+        return []
     }
     else if (searchContext.type === "surroundSearchContext") {
         const backwardsTargets = findTargets(editor, sourceSelection, searchContext.left)
@@ -277,7 +330,7 @@ export async function handleSwap(editor: vscode.TextEditor, params: SwapRequest[
             const text2 = editor.document.getText(target2);
             toReplace.push([target1, text2])
             toReplace.push([target2, text1])
-        } 
+        }
     }
     editor.edit(builder => {
         for (const [target, text] of toReplace) {

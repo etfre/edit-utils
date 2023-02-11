@@ -221,13 +221,15 @@ type CurrentSelectionTarget = {
 type Target = NodeTarget | TextTarget | CurrentSelectionTarget
 
 type OnDone =
+    | { type: "moveAndDelete" }
+    | { type: "moveAndPaste" }
     | { type: "delete" }
     | { type: "cut" } 
     | { type: "copy" } 
+    | { type: "paste" } 
     | { type: "executeCommand", commandName: string } 
     | { type: "surroundReplace", left: string, right: string } 
     | { type: "surroundInsert", left: string, right: string }
-type TargetAndDirection = { target: TextTarget, direction: "backwards" | "forwards" } | { target: NodeTarget, direction: "backwards" | "forwards" | "smart" }
 
 type SmartActionParams = {
     source: Source
@@ -288,3 +290,5 @@ type CurrentSelectionSearchContext = {
 }
 
 export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext | CurrentSelectionSearchContext
+
+export type NotArray<T> = T extends Array ? never : T;
