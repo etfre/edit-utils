@@ -31,7 +31,7 @@
 		"url": "https://github.com/hajdaini/select-until-pattern"
 	},
 	"engines": {
-		"vscode": "^1.63.2"
+		"vscode": "^1.75.1"
 	},
 	"categories": [
 		"Other"

@@ -10,10 +10,10 @@ export function initSubtypes(langsRoot: string) {
             if (err !== null) {
                 reject(err);
             }
-            const langFiles = items.filter(x => x.isFile() && x.name.endsWith(".json"));
-            for (const file of langFiles) {
-                const path = join(langsRoot, file.name);
-                const lang = file.name.split('.')[0];
+            const langFolders = items.filter(x => x.isDirectory())
+            for (const folder of langFolders) {
+                const path = join(langsRoot, folder.name, "node-types.json");
+                const lang = folder.name;
                 readFile(path, { encoding: 'utf-8' }, async (err, data) => {
                     if (err) {
                         reject(err);
@@ -21,7 +21,7 @@ export function initSubtypes(langsRoot: string) {
                     const langSubtypes = parseNodeTypes(JSON.parse(data));
                     SUBTYPES_BY_LANG.set(lang, langSubtypes);
                     console.log(`Loaded language: ${lang}`)
-                    if (SUBTYPES_BY_LANG.size === langFiles.length) {
+                    if (SUBTYPES_BY_LANG.size === langFolders.length) {
                         resolve();
                     }
                 })
