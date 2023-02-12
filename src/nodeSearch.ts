@@ -1,7 +1,7 @@
 import * as vscode from "vscode"
 import * as ast from "./ast"
 import { NodeSearchContext, SearchContext, TreeNode } from "./types";
-import { mergeGenerators } from "./util";
+import { assert, mergeGenerators } from "./util";
 
 export function findNode(
     selection: vscode.Selection,
@@ -28,14 +28,18 @@ export function findNode(
     }
     let ranges: vscode.Range[] = []
     for (const matches of ast.search(pathNodeGeneratorFn, searchContext)) {
-        const filteredMatches = matches.filter(x => filterMatch(x, selection, searchContext.direction));
+        let filteredMatches = matches.filter(x => filterMatch(x, selection, searchContext.direction));
         if (filteredMatches.length > 0) {
+            if (searchContext.getInside) {
+
+            }
+            searchContext.resultInfo.matches = filteredMatches;
             if (searchContext.getEvery) {
-                const mergedRanges = filteredMatches.map(x => ast.rangeFromNodeArray([x]));
+                const mergedRanges = filteredMatches.map(x => rangeFromNodeArray([x], searchContext.getInside));
                 ranges = ranges.concat(mergedRanges)
             }
             else {
-                const mergedRange = ast.rangeFromNodeArray(filteredMatches);
+                const mergedRange = rangeFromNodeArray(filteredMatches, searchContext.getInside);
                 ranges.push(mergedRange)
             }
             break;
@@ -43,6 +47,7 @@ export function findNode(
     }
     return ranges;
 }
+
 
 function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction: "backwards" | "forwards" | "smart"): boolean {
     if (direction === "backwards") {
@@ -52,4 +57,23 @@ function filterMatch(testNode: TreeNode, selection: vscode.Selection, direction:
         return ast.vscodePositionFromNodePosition(testNode.startPosition).isAfter(selection.end);
     }
     return true;
+}
+
+
+export function rangeFromNodeArray(nodes: TreeNode[], getInside: boolean): vscode.Range {
+    // nodes must be in order
+    assert(nodes.length > 0, "At least one node is required for a selection");
+    const startNode = nodes[0];
+    const endNode = nodes[nodes.length - 1];
+    if (getInside) {
+        const children = nodes[0].children
+        assert(nodes.length === 1 && children.length >= 2, "Must have a single sequence match");
+        const start = ast.vscodePositionFromNodePosition(children[0].endPosition)
+        const end = ast.vscodePositionFromNodePosition(children[children.length - 1].startPosition);
+        return new vscode.Range(start, end)
+        // We want to select after first child until the start of the last child
+    }
+    const start = ast.vscodePositionFromNodePosition(startNode.startPosition);
+    const end = ast.vscodePositionFromNodePosition(endNode.endPosition);
+    return new vscode.Range(start, end)
 }

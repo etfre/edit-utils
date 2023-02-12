@@ -101,24 +101,9 @@ function isSelection(val: vscode.Range | vscode.Position): val is vscode.Selecti
 
 export function shrinkSelection(selection: vscode.Selection, startLength: number, endLength: number): vscode.Selection {
     const start = selection.start.translate(0, -startLength);
-    const end = selection.end.translate(0, -endLength);
+    const end = selection.end.translate(0, endLength);
     assert(start.isBeforeOrEqual(end))
     const isReverse = selection.active.isBefore(selection.anchor);
     const [anchor, active] = isReverse ? [end, start] : [start, end]
     return new vscode.Selection(anchor, active)
 }
-
-export function flatten<T>(arr: (T | T[])[]): T[] {
-    let flattened: T[] = [];
-    for (const item of arr) {
-        if (Array.isArray(item)) {
-            flattened = flattened.concat(flatten(item))
-        }
-        else {
-            flattened.push(item)
-        }
-    }
-    return flattened;
-}
-
-flatten([1,2,3])

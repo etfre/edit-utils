@@ -203,6 +203,7 @@ type NodeTarget = {
     side?: "start" | "end"
     count?: number
     greedy?: boolean
+    inside?: boolean
     direction: "backwards" | "forwards" | "smart",
 }
 
@@ -230,6 +231,7 @@ type OnDone =
     | { type: "executeCommand", commandName: string } 
     | { type: "surroundReplace", left: string, right: string } 
     | { type: "surroundInsert", left: string, right: string }
+    | {type: "fixSequence", sep: string}
 
 type SmartActionParams = {
     source: Source
@@ -262,7 +264,8 @@ type NodeSearchContext = {
     count: number
     side: "start" | "end" | null
     getEvery: boolean
-    resultInfo: { [key in string]: any }
+    getInside: boolean
+    resultInfo: { matches?: TreeNode[] }
     greedy: boolean
 }
 
@@ -273,7 +276,7 @@ type TextSearchContext = {
     direction: "backwards" | "forwards"
     count: number
     side: "start" | "end" | null
-    resultInfo: { [key in string]: any }
+    resultInfo: { matchLength?: number }
 }
 
 type SurroundSearchContext = {

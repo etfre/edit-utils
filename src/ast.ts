@@ -522,25 +522,6 @@ export function selectionFromNodeArray(nodes: TreeNode[], reverse = false) {
     return new vscode.Selection(anchor, active)
 }
 
-export function rangeFromNodeArray(nodes: TreeNode[]) {
-    let start: vscode.Position | null = null
-    let end: vscode.Position | null = null
-    for (const node of nodes) {
-        const startPosition = vscodePositionFromNodePosition(node.startPosition)
-        const endPosition = vscodePositionFromNodePosition(node.endPosition)
-        if (start === null || startPosition.isBefore(start)) {
-            start = startPosition
-        }
-        if (end === null || endPosition.isAfter(end)) {
-            end = endPosition
-        }
-    }
-    if (start === null || end === null) {
-        throw new Error("At least one node is required for a selection")
-    }
-    return new vscode.Range(start, end)
-}
-
 export class PathNode {
 
     parent: { indexOfChild: number, node: PathNode } | null
