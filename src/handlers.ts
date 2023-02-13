@@ -55,6 +55,7 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
     const count = params.count ?? 1;
     const left = params.left ?? BACKWARDS_SURROUND_CHARS;
     const right = params.right ?? FORWARDS_SURROUND_CHARS;
+    const side = params.side ?? null;
     const searchContext: SurroundSearchContext = {
         type: "surroundSearchContext",
         left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
@@ -63,7 +64,7 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
         resultInfo: {}
     }
     const onDone = params.onDone ?? null;
-    await doThing2(params.action, editor, searchContext, null, onDone);
+    await doThing2(params.action, editor, searchContext, side, onDone);
 }
 
 type MatchDetails = {
@@ -294,11 +295,11 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
     }
     else if (searchContext.type === "surroundSearchContext") {
         const backwardsTargets = findTargets(editor, sourceSelection, searchContext.left)
-        if (backwardsTargets === null) {
+        if (backwardsTargets === null || backwardsTargets.length === 0) {
             return null;
         }
         const forwardsTargets = findTargets(editor, sourceSelection, searchContext.right);
-        if (forwardsTargets !== null) {
+        if (forwardsTargets !== null && forwardsTargets.length > 0) {
             const match = searchContext.includeLastMatch ?
                 backwardsTargets[0].union(forwardsTargets[0]) :
                 new vscode.Range(backwardsTargets[0].end, forwardsTargets[0].start);

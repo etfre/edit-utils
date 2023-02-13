@@ -33,6 +33,7 @@ type SelectInSurroundRequest = RequestBase & {
         deleteSelection?: boolean
         ignoreCase?: boolean
         includeLastMatch?: boolean
+        side?: Side
     }
 }
 
@@ -200,7 +201,7 @@ type Source = "anchor" | "active" | "start" | "end"
 type NodeTarget = {
     type: "nodeTarget"
     selector: string,
-    side?: "start" | "end"
+    side?: Side
     count?: number
     greedy?: boolean
     inside?: boolean
@@ -210,7 +211,7 @@ type NodeTarget = {
 type TextTarget = {
     type: "textTarget"
     pattern: string
-    side?: "start" | "end"
+    side?: Side
     count?: number
     direction: "backwards" | "forwards",
 }
@@ -256,13 +257,15 @@ type SurroundInsertRequest = RequestBase & {
     params: { left: string, right: string }
 }
 
+type Side = "start" | "end"
+
 type NodeSearchContext = {
     type: "nodeSearchContext"
     root: TreeNode
     selector: Selector
     direction: "backwards" | "forwards" | "smart"
     count: number
-    side: "start" | "end" | null
+    side: Side | null
     getEvery: boolean
     getInside: boolean
     resultInfo: { matches?: TreeNode[] }
@@ -275,7 +278,7 @@ type TextSearchContext = {
     ignoreCase: boolean
     direction: "backwards" | "forwards"
     count: number
-    side: "start" | "end" | null
+    side: Side | null
     resultInfo: { matchLength?: number }
 }
 
@@ -284,12 +287,12 @@ type SurroundSearchContext = {
     left: TextSearchContext
     right: TextSearchContext
     includeLastMatch: boolean
-    resultInfo: { [key in string]: any }
+    resultInfo: {  }
 }
 
 type CurrentSelectionSearchContext = {
     type: "currentSelectionSearchContext"
-    resultInfo: { [key in string]: any }
+    resultInfo: {  }
 }
 
 export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext | CurrentSelectionSearchContext
