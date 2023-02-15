@@ -127,7 +127,7 @@ async function doThing2(
     let selectionSearchResults: MatchDetails[] = [];
     for (const selection of editor.selections) {
         const targets = findTargets(editor, selection, searchContext);
-        if (targets === null || targets.length === 0) {
+        if (targets.length === 0) {
             continue;
         }
         selectionSearchResults.push(translateMatches(action, onDone, targets, selection, side, searchContext));
@@ -278,7 +278,7 @@ function getSource(selection: vscode.Selection, direction: "backwards" | "forwar
     }
 }
 
-function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selection, searchContext: SearchContext): vscode.Range[] | null {
+function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selection, searchContext: SearchContext): vscode.Range[] {
     if (searchContext.type === "nodeSearchContext") {
         const source = getSource(sourceSelection, searchContext.direction);
         return findNode(sourceSelection, source, searchContext);
@@ -295,16 +295,17 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
     }
     else if (searchContext.type === "surroundSearchContext") {
         const backwardsTargets = findTargets(editor, sourceSelection, searchContext.left)
-        if (backwardsTargets === null || backwardsTargets.length === 0) {
-            return null;
+        if (backwardsTargets.length === 0) {
+            return [];
         }
         const forwardsTargets = findTargets(editor, sourceSelection, searchContext.right);
-        if (forwardsTargets !== null && forwardsTargets.length > 0) {
+        if (forwardsTargets.length > 0) {
             const match = searchContext.includeLastMatch ?
                 backwardsTargets[0].union(forwardsTargets[0]) :
                 new vscode.Range(backwardsTargets[0].end, forwardsTargets[0].start);
             return [match]
         }
+        return []
     }
     else if (searchContext.type === "currentSelectionSearchContext") {
         return [sourceSelection];
@@ -330,11 +331,11 @@ export async function handleSwap(editor: vscode.TextEditor, params: SwapRequest[
     const toReplace: [vscode.Range, string][] = [];
     for (const selection of editor.selections) {
         const targets1 = findTargets(editor, selection, searchContext1);
-        if (targets1 === null || targets1.length === 0) {
+        if (targets1.length === 0) {
             continue;
         }
         const targets2 = findTargets(editor, selection, searchContext2);
-        if (targets2 === null || targets2.length !== targets1.length) {
+        if (targets2.length !== targets1.length) {
             continue;
         }
         for (const [i, target1] of targets1.entries()) {
