@@ -310,7 +310,7 @@ function findTargets(editor: vscode.TextEditor, sourceSelection: vscode.Selectio
     else if (searchContext.type === "currentSelectionSearchContext") {
         return [sourceSelection];
     }
-    throw new Error(`Unrecognized search type: ${searchContext.type}`);
+    throw new Error(`Unrecognized search type: ${searchContext}`);
 }
 
 export async function handleGoToLine(editor: vscode.TextEditor, params: GoToLineRequest['params']) {

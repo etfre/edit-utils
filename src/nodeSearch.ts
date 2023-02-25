@@ -64,15 +64,15 @@ export function rangeFromNodeArray(nodes: TreeNode[], getInside: boolean): vscod
     // nodes must be in order
     assert(nodes.length > 0, "At least one node is required for a selection");
     const startNode = nodes[0];
-    const endNode = nodes[nodes.length - 1];
     if (getInside) {
-        const children = nodes[0].children
+        const children = startNode.children
         assert(nodes.length === 1 && children.length >= 2, "Must have a single sequence match");
         const start = ast.vscodePositionFromNodePosition(children[0].endPosition)
         const end = ast.vscodePositionFromNodePosition(children[children.length - 1].startPosition);
         return new vscode.Range(start, end)
         // We want to select after first child until the start of the last child
     }
+    const endNode = nodes[nodes.length - 1];
     const start = ast.vscodePositionFromNodePosition(startNode.startPosition);
     const end = ast.vscodePositionFromNodePosition(endNode.endPosition);
     return new vscode.Range(start, end)
