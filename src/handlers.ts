@@ -3,10 +3,12 @@ import { BACKWARDS_SURROUND_CHARS, FORWARDS_SURROUND_CHARS, getPatternRange } fr
 import * as ast from "./ast"
 import * as dsl from "./parser"
 import { assert, ensureSelection, mergeGenerators, shrinkSelection, unEscapeRegex } from './util';
-import { CurrentSelectionSearchContext, ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest, 
-    GoToLineRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
-     SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target, 
-     TextSearchContext, TextTarget, TreeNode } from './types';
+import {
+    CurrentSelectionSearchContext, ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest,
+    GoToLineRequest, InsertTextRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
+    SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target,
+    TextSearchContext, TextTarget, TreeNode
+} from './types';
 import { findNode } from './nodeSearch';
 import { focusAndSelectBookmarks, setBookmarkFromSelection } from './bookmark';
 
@@ -21,7 +23,7 @@ export async function handleExecuteCommandsPerSelection(editor: vscode.TextEdito
             await vscode.commands.executeCommand(cmd)
         }
     }
-    const searchContext: CurrentSelectionSearchContext = {type: "currentSelectionSearchContext", resultInfo: {}}
+    const searchContext: CurrentSelectionSearchContext = { type: "currentSelectionSearchContext", resultInfo: {} }
     if (params.onDone) {
         if (params.onDone.type === "executeCommand") {
             await vscode.commands.executeCommand(params.onDone.commandName);
@@ -346,7 +348,7 @@ export async function handleSwap(editor: vscode.TextEditor, params: SwapRequest[
             toReplace.push([target2, text1])
         }
     }
-    editor.edit(builder => {
+    await editor.edit(builder => {
         for (const [target, text] of toReplace) {
             builder.replace(target, text)
         }
@@ -360,4 +362,43 @@ export async function handleSetBookmarks(editor: vscode.TextEditor, params: {}) 
 
 export async function handleFocusAndSelectBookmark(editor: vscode.TextEditor, params: {}) {
     focusAndSelectBookmarks(editor);
+}
+
+export async function handleInsertText(editor: vscode.TextEditor, params: InsertTextRequest['params']) {
+    const newSelections: string[] = []
+    const toDelete: vscode.Selection[] = []
+    for (const sel of editor.selections) {
+        let selText = params.text;
+        let start = sel.start;
+        if (params.startSpaces !== null) {
+            selText = " ".repeat(params.startSpaces) + selText;
+            let testStart = start.translate(0, -1);
+            while (testStart.character > 0 && editor.document.getText(new vscode.Range(testStart, start)) === " ") {
+                start = testStart;
+                testStart = start.translate(0, -1);
+            }
+        }
+        let end = sel.end;
+        if (params.endSpaces !== null) {
+            selText = selText + " ".repeat(params.endSpaces);
+            let testEnd = end.translate(0, 1);
+            while (editor.document.getText(new vscode.Range(end, testEnd)) === " ") {
+                end = testEnd;
+                testEnd = end.translate(0, 1);
+            }
+        }
+        toDelete.push(new vscode.Selection(start, end));
+        newSelections.push(selText);
+    }
+    await editor.edit(builder => {
+        for (const deleteSel of toDelete) {
+            builder.delete(deleteSel);
+        }
+    })
+    await editor.edit(builder => {
+        for (const [i, sel] of editor.selections.entries()) {
+            const newText = newSelections[i];
+            builder.insert(sel.end, newText);
+        }
+    });
 }

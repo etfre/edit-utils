@@ -70,6 +70,10 @@ type SelectAndFocusBookmarksRequest = RequestBase & {
     method: "FOCUS_AND_SELECT_BOOKMARKS"
     params: []
 }
+type InsertTextRequest = RequestBase & {
+    method: "INSERT_TEXT"
+    params: {text: string, startSpaces: number | null, endSpaces: number | null}
+}
 
 type ClientRequest =
     | PingRequest
@@ -82,6 +86,7 @@ type ClientRequest =
     | SwapRequest
     | SetBookmarksRequest
     | SelectAndFocusBookmarksRequest
+    | InsertTextRequest
 
 type ClientResponseResult = JSONValue
 
