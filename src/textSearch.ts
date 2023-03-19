@@ -58,7 +58,7 @@ export function getPatternRange(
     if (reverse) {
         lines = lines.reverse();
     }
-    const result = getLastMatch(lines, searchContext.pattern, flags, searchContext.count, reverse);
+    const result = getLastMatch(lines, searchContext.pattern, flags, searchContext.count, reverse, searchContext.useAntiPattern);
     if (result === null) return null;
     const { match, lineNumber } = result;
     const endPosLine = reverse ? (fromPos.line - lineNumber) : (fromPos.line + lineNumber);
@@ -74,7 +74,7 @@ export function getPatternRange(
     return new vscode.Range(start, end);
 }
 
-function getLastMatch(lines: string[], pattern: string, flags: string, repeatNumber: number, reverse: boolean) {
+function getLastMatch(lines: string[], pattern: string, flags: string, repeatNumber: number, reverse: boolean, useAntiPattern: boolean) {
     let matchCounts = new Map<string, number>()
     const antiPattern = reverse ? BACKWARDS_ANTIPATTERN : FORWARDS_ANTIPATTERN
     // if antiPattern, merge into one regex then check what we get
@@ -87,7 +87,7 @@ function getLastMatch(lines: string[], pattern: string, flags: string, repeatNum
         for (const match of lineMatches) {
             // found antipattern
             const antiPatternMatch = match[2]
-            if (antiPatternMatch) {
+            if (antiPatternMatch && useAntiPattern) {
                 if (antiPatternMatch in antiPatternMap) {
                     //@ts-ignore
                     const matchPattern = antiPatternMap[antiPatternMatch]
@@ -97,7 +97,7 @@ function getLastMatch(lines: string[], pattern: string, flags: string, repeatNum
                     matchCounts.set(matchPattern, matchCounts.get(matchPattern) as number - 1)
                 }
             }
-            else {
+            else if (match[1]) {
                 const patternMatch = match[1];
                 if (!matchCounts.has(patternMatch)) {
                     matchCounts.set(patternMatch, 0)

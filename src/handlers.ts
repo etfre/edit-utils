@@ -5,7 +5,7 @@ import * as dsl from "./parser"
 import { assert, ensureSelection, mergeGenerators, shrinkSelection, unEscapeRegex } from './util';
 import {
     CurrentSelectionSearchContext, ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest,
-    GoToLineRequest, InsertTextRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
+    GoToLineRequest, IdentAutocompleteRequest, InsertTextRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
     SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target,
     TextSearchContext, TextTarget, TreeNode
 } from './types';
@@ -60,8 +60,8 @@ export async function handleSurroundAction(editor: vscode.TextEditor, params: Se
     const side = params.side ?? null;
     const searchContext: SurroundSearchContext = {
         type: "surroundSearchContext",
-        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, resultInfo: {} },
-        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, resultInfo: {} },
+        left: { type: "textSearchContext", direction: "backwards", pattern: left, count, ignoreCase: true, side: null, useAntiPattern: true, resultInfo: {} },
+        right: { type: "textSearchContext", direction: "forwards", pattern: right, count, ignoreCase: true, side: null, useAntiPattern: true, resultInfo: {} },
         includeLastMatch: params.includeLastMatch ?? true,
         resultInfo: {}
     }
@@ -237,7 +237,7 @@ function createTextSearchContext(
     const count = target.count ?? 1;
     const side = target.side ?? null;
     const pattern = target.pattern;
-    return { type: "textSearchContext", direction: target.direction, count, pattern, side, ignoreCase: true, resultInfo: {} }
+    return { type: "textSearchContext", direction: target.direction, count, pattern, side, ignoreCase: true, useAntiPattern: true, resultInfo: {} }
 }
 
 
@@ -401,4 +401,68 @@ export async function handleInsertText(editor: vscode.TextEditor, params: Insert
             builder.insert(sel.end, newText);
         }
     });
+}
+
+const identTypesByLang: Record<string, string[]> = {
+    python: ["identifier", "attribute"],
+    javascript: ["identifier", "property_identifier"],
+    typescript: ["identifier", "property_identifier"],
+}
+
+export async function handleIdentAutocomplete(editor: vscode.TextEditor, params: IdentAutocompleteRequest['params']) {
+    assert(editor.document.languageId in identTypesByLang)
+    const identTypes = identTypesByLang[editor.document.languageId];
+    const tree = (ast.parseTreeExtensionExports as any).getTree(editor.document)
+    const root = tree.rootNode
+    // ast.dump(root);
+    const test = "[a-z0-9_]+";
+    const fullPattern = "[a-z_][a-z0-9_]*"
+    const replaceWith: { location: vscode.Range, value: string }[] = []
+    const appendText = params.text ?? "";
+    for (const selection of editor.selections) {
+        const leftSearch: TextSearchContext = {
+            type: "textSearchContext", direction: "backwards", pattern: test,
+            count: 1, ignoreCase: true, side: null, useAntiPattern: false, resultInfo: {}
+        }
+        const rightSearch: TextSearchContext = {
+            type: "textSearchContext", direction: "forwards", pattern: test,
+            count: 1, ignoreCase: true, side: null, useAntiPattern: false, resultInfo: {}
+        }
+        const active = selection.active
+        const sourceSelection = new vscode.Selection(active, active);
+
+        const backwardsTargets = findTargets(editor, sourceSelection, leftSearch);
+        const start = backwardsTargets.length === 0 || backwardsTargets[0].start.line !== active.line ?
+            active :
+            backwardsTargets[0].start;
+
+        const forwardsTargets = findTargets(editor, sourceSelection, rightSearch);
+        const end = forwardsTargets.length === 0 || forwardsTargets[0].start.line !== active.line ?
+            active :
+            forwardsTargets[0].end;
+
+        const target = new vscode.Range(start, end)
+        const identText = editor.document.getText(target) + appendText;
+        if (identText.length === 0 || identText.match(new RegExp(fullPattern, "i")) === null) {
+            continue;
+        }
+        const path = ast.findNodePathToPosition(active, root);
+        assert(path !== null);
+        const leaf = path.getLeaf()
+        for (const node of ast.iterDirection("backwards", leaf, true)) {
+            const nodeText = node.node.text;
+            const autocompleteFromNode = identTypes.includes(node.node.type) &&
+                nodeText.startsWith(identText) &&
+                nodeText.length > identText.length;
+            if (autocompleteFromNode) {
+                replaceWith.push({ location: target, value: nodeText })
+                break;
+            }
+        }
+    }
+    editor.edit(builder => {
+        for (const { location: range, value } of replaceWith) {
+            builder.replace(range, value)
+        }
+    })
 }

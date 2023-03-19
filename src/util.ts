@@ -95,7 +95,7 @@ export function ensureSelection(val: vscode.Range | vscode.Position): vscode.Sel
     return new vscode.Selection(val, val);
 }
 
-function isSelection(val: vscode.Range | vscode.Position): val is vscode.Selection {
+export function isSelection(val: vscode.Range | vscode.Position): val is vscode.Selection {
     return "anchor" in val;
 }
 

@@ -34,6 +34,7 @@ const clientMessageHandlers: clientMessageHandlersType = {
     "SET_BOOKMARKS": handlers.handleSetBookmarks,
     "FOCUS_AND_SELECT_BOOKMARKS": handlers.handleFocusAndSelectBookmark,
     "INSERT_TEXT": handlers.handleInsertText,
+    "IDENT_AUTOCOMPLETE": handlers.handleIdentAutocomplete,
 }
 export async function messageRPCClient(msg: ClientResponse | ClientResponse[]) {
     const messageStr = JSON.stringify(msg)

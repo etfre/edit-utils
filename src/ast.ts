@@ -122,12 +122,14 @@ export function* iterDirection(
         if (yieldDirect) {
             yield pathNode;
         }
-        if (pathNode.parent === null) break;
+        if (pathNode.parent === null) {
+            break;
+        }
         const indexOfChild = pathNode.parent.indexOfChild
         const parent = pathNode.parent.node;
         const children = parent.node.children
         const siblingIter = isReverse ?
-            sliceIndices(children.length, indexOfChild - 1, 0, -1) :
+            sliceIndices(children.length, indexOfChild - 1, null, -1) :
             sliceIndices(children.length, indexOfChild + 1, children.length, 1)
         for (const siblingIdx of siblingIter) {
             const sibling = children[siblingIdx]

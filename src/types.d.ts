@@ -70,10 +70,13 @@ type SelectAndFocusBookmarksRequest = RequestBase & {
     method: "FOCUS_AND_SELECT_BOOKMARKS"
     params: []
 }
+
 type InsertTextRequest = RequestBase & {
     method: "INSERT_TEXT"
-    params: {text: string, startSpaces: number | null, endSpaces: number | null}
+    params: { text: string, startSpaces: number | null, endSpaces: number | null }
 }
+
+type IdentAutocompleteRequest = RequestBase & { params: { text?: string } }
 
 type ClientRequest =
     | PingRequest
@@ -87,6 +90,7 @@ type ClientRequest =
     | SetBookmarksRequest
     | SelectAndFocusBookmarksRequest
     | InsertTextRequest
+    | IdentAutocompleteRequest
 
 type ClientResponseResult = JSONValue
 
@@ -231,13 +235,13 @@ type OnDone =
     | { type: "moveAndDelete" }
     | { type: "moveAndPaste" }
     | { type: "delete" }
-    | { type: "cut" } 
-    | { type: "copy" } 
-    | { type: "paste" } 
-    | { type: "executeCommand", commandName: string } 
-    | { type: "surroundReplace", left: string, right: string } 
+    | { type: "cut" }
+    | { type: "copy" }
+    | { type: "paste" }
+    | { type: "executeCommand", commandName: string }
+    | { type: "surroundReplace", left: string, right: string }
     | { type: "surroundInsert", left: string, right: string }
-    | {type: "fixSequence", sep: string}
+    | { type: "fixSequence", sep: string }
 
 type SmartActionParams = {
     source: Source
@@ -254,7 +258,7 @@ type SmartActionRequest = RequestBase & {
 
 type SwapRequest = RequestBase & {
     method: "SWAP"
-    params: {target1: NodeTarget, target2: NodeTarget, getEvery?: boolean}
+    params: { target1: NodeTarget, target2: NodeTarget, getEvery?: boolean }
 }
 
 type SurroundInsertRequest = RequestBase & {
@@ -284,6 +288,7 @@ type TextSearchContext = {
     direction: "backwards" | "forwards"
     count: number
     side: Side | null
+    useAntiPattern: boolean
     resultInfo: { matchLength?: number }
 }
 
@@ -292,12 +297,12 @@ type SurroundSearchContext = {
     left: TextSearchContext
     right: TextSearchContext
     includeLastMatch: boolean
-    resultInfo: {  }
+    resultInfo: {}
 }
 
 type CurrentSelectionSearchContext = {
     type: "currentSelectionSearchContext"
-    resultInfo: {  }
+    resultInfo: {}
 }
 
 export type SearchContext = NodeSearchContext | TextSearchContext | SurroundSearchContext | CurrentSelectionSearchContext
