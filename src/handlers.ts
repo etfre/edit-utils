@@ -180,7 +180,8 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
             }
         });
     }
-    else if (odt === "copy" || odt === "cut") {
+    else if (odt === "copy" || odt === "cut" || odt === "paste") {
+        const prevClip = await vscode.env.clipboard.readText();
         const newClip: string[] = [];
         for (const sel of allTargets) {
             newClip.push(editor.document.getText(sel));
@@ -193,23 +194,27 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
                 }
             });
         }
-        else {
+        else if (odt === "copy") {
             vscode.window.showInformationMessage('Copied text');
         }
-    }
-    else if (odt === "delete" || odt === "moveAndDelete" || odt === "moveAndPaste" || odt === "paste") {
-        let replaceWith = ""
-        if (odt === "moveAndPaste" || odt === "paste") {
-            const clipContents = await vscode.env.clipboard.readText();
-            const clipLines = clipContents.split("\n");
-            //TODO
+        else {
+            await vscode.commands.executeCommand("editor.action.clipboardPasteAction");
+            await vscode.env.clipboard.writeText(prevClip);
         }
-        editor.edit(builder => {
-            for (const target of allTargets) {
-                builder.replace(target, replaceWith)
-            }
-        });
     }
+    // else if (odt === "paste") {
+    //     let replaceWith = ""
+    //     if (odt === "moveAndPaste" || odt === "paste") {
+    //         const clipContents = await vscode.env.clipboard.readText();
+    //         const clipLines = clipContents.split("\n");
+    //         //TODO
+    //     }
+    //     editor.edit(builder => {
+    //         for (const target of allTargets) {
+    //             builder.replace(target, replaceWith)
+    //         }
+    //     });
+    // }
     else if (odt === "fixSequence") {
 
     }
@@ -432,12 +437,14 @@ export async function handleIdentAutocomplete(editor: vscode.TextEditor, params:
         const sourceSelection = new vscode.Selection(active, active);
 
         const backwardsTargets = findTargets(editor, sourceSelection, leftSearch);
-        const start = backwardsTargets.length === 0 || backwardsTargets[0].start.line !== active.line ?
-            active :
-            backwardsTargets[0].start;
-
+        const backMatch = backwardsTargets[0];
+        const start = backMatch === undefined || backMatch.start.line !== active.line || backMatch.end.character !== active.character ?
+        active :
+        backwardsTargets[0].start;
+        
         const forwardsTargets = findTargets(editor, sourceSelection, rightSearch);
-        const end = forwardsTargets.length === 0 || forwardsTargets[0].start.line !== active.line ?
+        const forwardsMatch = forwardsTargets[0];
+        const end = forwardsMatch === undefined || forwardsMatch.start.line !== active.line || forwardsMatch.start.character !== active.character ?
             active :
             forwardsTargets[0].end;
 
@@ -449,7 +456,7 @@ export async function handleIdentAutocomplete(editor: vscode.TextEditor, params:
         const path = ast.findNodePathToPosition(active, root);
         assert(path !== null);
         const leaf = path.getLeaf()
-        for (const node of ast.iterDirection("backwards", leaf, true)) {
+        for (const node of ast.iterClosest(active, leaf)) {
             const nodeText = node.node.text;
             const autocompleteFromNode = identTypes.includes(node.node.type) &&
                 nodeText.startsWith(identText) &&
