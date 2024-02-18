@@ -76,6 +76,11 @@ type InsertTextRequest = RequestBase & {
     params: { text: string, startSpaces: number | null, endSpaces: number | null }
 }
 
+type InsertSnippetRequest = RequestBase & {
+    method: "INSERT_SNIPPET"
+    params: { text: string }
+}
+
 type IdentAutocompleteRequest = RequestBase & { params: { text?: string } }
 
 type ClientRequest =
@@ -91,6 +96,7 @@ type ClientRequest =
     | SelectAndFocusBookmarksRequest
     | InsertTextRequest
     | IdentAutocompleteRequest
+    | InsertSnippetRequest
 
 type ClientResponseResult = JSONValue
 
@@ -222,6 +228,7 @@ type TextTarget = {
     pattern: string
     side?: Side
     count?: number
+    useAntiPattern?: boolean
     direction: "backwards" | "forwards",
 }
 

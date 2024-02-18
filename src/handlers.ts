@@ -5,7 +5,7 @@ import * as dsl from "./parser"
 import { assert, ensureSelection, mergeGenerators, shrinkSelection, unEscapeRegex } from './util';
 import {
     CurrentSelectionSearchContext, ExecuteCommandRequest, ExecuteCommandsPerSelectionRequest,
-    GoToLineRequest, IdentAutocompleteRequest, InsertTextRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
+    GoToLineRequest, IdentAutocompleteRequest, InsertSnippetRequest, InsertTextRequest, NodeSearchContext, NodeTarget, OnDone, SearchContext, SelectInSurroundRequest,
     SmartActionParams, SurroundInsertRequest, SurroundSearchContext, SwapRequest, Target,
     TextSearchContext, TextTarget, TreeNode
 } from './types';
@@ -180,6 +180,13 @@ async function doOnDone(editor: vscode.TextEditor, selectionSearchResults: Match
             }
         });
     }
+    else if (odt === "moveAndDelete") {
+        editor.edit(builder => {
+            for (const target of allTargets) {
+                builder.replace(target, "")
+            }
+        });
+    }
     else if (odt === "copy" || odt === "cut" || odt === "paste") {
         const prevClip = await vscode.env.clipboard.readText();
         const newClip: string[] = [];
@@ -242,7 +249,8 @@ function createTextSearchContext(
     const count = target.count ?? 1;
     const side = target.side ?? null;
     const pattern = target.pattern;
-    return { type: "textSearchContext", direction: target.direction, count, pattern, side, ignoreCase: true, useAntiPattern: true, resultInfo: {} }
+    const useAntiPattern = target.useAntiPattern ?? true;
+    return { type: "textSearchContext", direction: target.direction, count, pattern, side, ignoreCase: true, useAntiPattern, resultInfo: {} }
 }
 
 
@@ -395,6 +403,7 @@ export async function handleInsertText(editor: vscode.TextEditor, params: Insert
         toDelete.push(new vscode.Selection(start, end));
         newSelections.push(selText);
     }
+    
     await editor.edit(builder => {
         for (const deleteSel of toDelete) {
             builder.delete(deleteSel);
@@ -412,6 +421,7 @@ const identTypesByLang: Record<string, string[]> = {
     python: ["identifier", "attribute"],
     javascript: ["identifier", "property_identifier"],
     typescript: ["identifier", "property_identifier"],
+    cpp: [],
 }
 
 export async function handleIdentAutocomplete(editor: vscode.TextEditor, params: IdentAutocompleteRequest['params']) {
@@ -448,14 +458,13 @@ export async function handleIdentAutocomplete(editor: vscode.TextEditor, params:
             active :
             forwardsTargets[0].end;
 
-        const target = new vscode.Range(start, end)
+        const target = new vscode.Range(start, end);
         const identText = editor.document.getText(target) + appendText;
         if (identText.length === 0 || identText.match(new RegExp(fullPattern, "i")) === null) {
             continue;
         }
         const path = ast.findNodePathToPosition(active, root);
-        assert(path !== null);
-        const leaf = path.getLeaf()
+        const leaf = path!.getLeaf()
         for (const node of ast.iterClosest(active, leaf)) {
             const nodeText = node.node.text;
             const autocompleteFromNode = identTypes.includes(node.node.type) &&
@@ -472,4 +481,10 @@ export async function handleIdentAutocomplete(editor: vscode.TextEditor, params:
             builder.replace(range, value)
         }
     })
+}
+
+export async function handleInsertSnippet(editor: vscode.TextEditor, params: InsertSnippetRequest['params']) {
+    for (const sel of editor.selections) {
+        await editor.insertSnippet(new vscode.SnippetString(params.text));
+    }
 }
